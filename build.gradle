@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.tongji.cst3492'
+version = '0.4.3'
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+
+// Each teammate sets this to their own IntelliJ installation root in
+// local.properties. IDEA_HOME / -PideaHome are supported as alternatives.
+def configuredIdeaHome = localProperties.getProperty('ideaHome')
+        ?: providers.gradleProperty('ideaHome').orNull
+        ?: System.getenv('IDEA_HOME')
+if (!configuredIdeaHome) {
+    throw new GradleException(
+            "Missing ideaHome. Copy local.properties.example to local.properties "
+                    + "and set ideaHome to your IntelliJ installation root.")
+}
+def ideaHome = configuredIdeaHome.replace('\\', '/')
+if (!file("${ideaHome}/lib").isDirectory()) {
+    throw new GradleException(
+            "ideaHome does not contain a lib directory: ${ideaHome}. "
+                    + "Point it to the IntelliJ installation root, not to bin/.")
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation files(
+        'lib/jackson-databind-2.19.2.jar',
+        'lib/jackson-core-2.19.2.jar',
+        'lib/jackson-annotations-2.19.2.jar'
+    )
+
+    // Compile against the IDE that is already installed on this machine.
+    // These jars are not packaged into the plugin.
+    compileOnly fileTree(dir: "${ideaHome}/lib", include: '*.jar')
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+tasks.register('buildPlugin', Zip) {
+    dependsOn tasks.named('jar')
+    archiveFileName = "cst3492-course-ta-${version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+
+    from(tasks.named('jar')) {
+        into 'cst3492-course-ta/lib'
+    }
+    from('lib') {
+        include '*.jar'
+        into 'cst3492-course-ta/lib'
+    }
+}

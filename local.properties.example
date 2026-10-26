@@ -1,0 +1,7 @@
+# Copy this file to local.properties and edit the paths for your machine.
+# Use forward slashes or escaped backslashes.
+#
+# ideaHome is the IntelliJ IDEA installation root (the folder containing bin,
+# lib and plugins). On macOS, use the Contents folder inside the .app bundle.
+ideaHome=C:/Program Files/JetBrains/IntelliJ IDEA 2026.1
+jdkHome=C:/Program Files/Java/jdk-21

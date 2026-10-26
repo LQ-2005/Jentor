@@ -1,0 +1,40 @@
+<idea-plugin>
+    <id>com.tongji.cst3492.ta</id>
+    <name>CST3492 Course TA</name>
+    <version>0.4.3</version>
+    <vendor>Tongji University</vendor>
+
+    <description>
+        A course-specific teaching assistant for CST3492 Java Enterprise Application Development.
+        It retrieves relevant lecture slides, answers questions with document and page citations,
+        and can attach the code selected in the editor to the conversation.
+    </description>
+
+    <idea-version since-build="252" until-build="261.*"/>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+                id="Course TA"
+                anchor="right"
+                factoryClass="com.tongji.cst3492.ta.ui.CourseTaToolWindowFactory"/>
+        <applicationService
+                serviceImplementation="com.tongji.cst3492.ta.settings.TaSettings"/>
+        <applicationConfigurable
+                id="com.tongji.cst3492.ta.settings"
+                parentId="tools"
+                displayName="CST3492 Course TA"
+                instance="com.tongji.cst3492.ta.settings.TaConfigurable"/>
+    </extensions>
+
+    <actions>
+        <action
+                id="Cst3492.AskSelection"
+                class="com.tongji.cst3492.ta.action.AskSelectionAction"
+                text="Ask Course TA about Selection"
+                description="Attach the selected code to the CST3492 course TA chat">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+    </actions>
+</idea-plugin>
