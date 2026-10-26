@@ -33,6 +33,11 @@ OUT_OF_SCOPE = [
 ]
 
 
+def safe_console(text: str) -> str:
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+
+
 def cosine(left: list[float], right: list[float]) -> float:
     return sum(a * b for a, b in zip(left, right))
 
@@ -195,7 +200,7 @@ def evaluate(index_path: Path, top_k: int) -> None:
                 f"   {marker} {chunk['fileName']} p.{chunk['pageStart']}"
                 f" | cos={vector_scores[index]:.3f}"
                 f" | bm25={lexical_scores[index]:.3f}"
-                f" | {chunk['text'][:70].replace(chr(10), ' / ')}"
+                f" | {safe_console(chunk['text'][:70].replace(chr(10), ' / '))}"
             )
         print()
 

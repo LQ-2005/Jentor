@@ -43,7 +43,7 @@ expansion, history/context prompt assembly, and retrieval quality.
 Reproduce with:
 
 ```powershell
-D:\anaconda\envs\deepseek_env\python.exe tools\evaluate_retrieval.py
+python tools/evaluate_retrieval.py
 ```
 
 The Java implementation is checked by `tools/RetrievalHarness.java` and prints the

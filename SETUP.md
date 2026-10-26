@@ -70,6 +70,7 @@ macOS/Linux：
 
 ```bash
 export JAVA_HOME=/path/to/jdk-21
+chmod +x gradlew   # zip 若丢失可执行权限时使用
 ./gradlew buildPlugin --offline --stacktrace
 ```
 
@@ -91,6 +92,20 @@ build/distributions/cst3492-course-ta-0.4.3.zip
 4. 在 Gradle 工具窗口执行 `buildPlugin`，或在 Terminal 运行 `.\gradlew.bat buildPlugin --offline`。
 
 工程只使用 Gradle 内置 `java` 插件，不使用 IntelliJ Platform Gradle 插件或 Kotlin DSL。
+
+运行检索测试：
+
+```powershell
+.\gradlew.bat runRetrievalHarness --offline
+```
+
+运行 JUnit 单元测试：
+
+```powershell
+.\gradlew.bat test
+```
+
+JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境中需要联网；插件构建本身不依赖 JUnit。
 
 ## 5. 安装插件
 
@@ -124,8 +139,8 @@ API Key 保存在每台电脑各自的 IntelliJ `PasswordSafe` 中，不会进�
 插件运行不需要这一步。需要重新解析 PDF 时，在一台有 Python 和 `pypdf` 的电脑上执行：
 
 ```powershell
-D:\anaconda\envs\deepseek_env\python.exe tools\build_index.py `
-  --materials "D:\java" `
+python tools/build_index.py `
+  --materials "<课件目录>" `
   --output "src\main\resources\index\course-index.json"
 ```
 

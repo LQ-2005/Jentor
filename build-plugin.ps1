@@ -17,6 +17,9 @@ if (-not $env:JAVA_HOME -or -not (Test-Path -LiteralPath "$env:JAVA_HOME\bin\jav
 }
 
 .\gradlew.bat buildPlugin --offline --stacktrace
+if ($LASTEXITCODE -ne 0) {
+    throw "Gradle build failed with exit code $LASTEXITCODE."
+}
 
 $zip = Join-Path $project "build\distributions\cst3492-course-ta-0.4.3.zip"
 if (Test-Path -LiteralPath $zip) {

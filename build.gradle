@@ -60,6 +60,30 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+tasks.register('compileRetrievalHarness', JavaCompile) {
+    dependsOn tasks.named('classes')
+    group = 'verification'
+    description = 'Compiles the offline retrieval and citation harness.'
+    source = files('tools/RetrievalHarness.java')
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('retrieval-harness')
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.register('runRetrievalHarness', JavaExec) {
+    dependsOn tasks.named('compileRetrievalHarness')
+    group = 'verification'
+    description = 'Runs the offline retrieval and citation harness.'
+    classpath = files(
+            layout.buildDirectory.dir('retrieval-harness'),
+            sourceSets.main.output,
+            sourceSets.main.runtimeClasspath,
+            'src/main/resources'
+    )
+    mainClass = 'com.tongji.cst3492.ta.tools.RetrievalHarness'
+}
+
 tasks.register('buildPlugin', Zip) {
     dependsOn tasks.named('jar')
     archiveFileName = "cst3492-course-ta-${version}.zip"

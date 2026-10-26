@@ -8,3 +8,8 @@ work/
 __pycache__/
 *.pyc
 local.properties
+*.log
+hs_err_pid*
+replay_pid*
+.DS_Store
+Thumbs.db

@@ -58,7 +58,7 @@ This is the F0 baseline required for every group.
 Prerequisites:
 
 - JDK 21
-- IntelliJ IDEA 2025.2 or newer
+- IntelliJ IDEA 2025.2 through 2026.1
 
 First copy `local.properties.example` to `local.properties` and set `ideaHome`
 (IntelliJ installation root) and `jdkHome` (JDK 21 root). Do not commit this
@@ -69,6 +69,10 @@ Commands (Windows):
 ```powershell
 .\build-plugin.ps1
 ```
+
+The first build on a machine without Gradle 8.14.2 needs network access to
+download the Gradle wrapper distribution. Plugin dependencies are already in
+`lib/`, so later plugin builds can run offline.
 
 The script reads `jdkHome` and runs:
 
@@ -131,25 +135,25 @@ The indexer needs `pypdf`.
 
 ```powershell
 python tools\build_index.py `
-  --materials "D:\java" `
+  --materials "<课件目录>" `
   --output "src\main\resources\index\course-index.json"
 ```
 
-On this machine, a ready environment is:
+On Windows, use the Python environment where `pypdf` is installed:
 
 ```powershell
-D:\anaconda\envs\deepseek_env\python.exe tools\build_index.py `
-  --materials "D:\java" `
+python tools\build_index.py `
+  --materials "<课件目录>" `
   --output "src\main\resources\index\course-index.json"
 ```
 
-After rebuilding, either rebuild the plugin or use **Load index** in the tool
-window and select the new JSON file.
+After rebuilding, either rebuild the plugin or use **Course materials → Import
+course index** in the tool window and select the new JSON file.
 
 ## Retrieval evaluation
 
 ```powershell
-D:\anaconda\envs\deepseek_env\python.exe tools\evaluate_retrieval.py
+python tools\evaluate_retrieval.py
 ```
 
 The current evaluation set contains ten questions with a known document and
@@ -164,9 +168,12 @@ Current result:
 The Java harness prints the same result:
 
 ```powershell
-java -cp "work\build2;lib\jackson-databind-2.19.2.jar;lib\jackson-core-2.19.2.jar;lib\jackson-annotations-2.19.2.jar" `
-  com.tongji.cst3492.ta.tools.RetrievalHarness
+.\gradlew.bat runRetrievalHarness --offline
 ```
+
+Run the unit tests from the project root with
+`.\gradlew.bat test`. JUnit is downloaded from Maven Central on its first run,
+so that command needs network access on a fresh Gradle cache.
 
 ## Architecture
 
@@ -200,16 +207,23 @@ Key packages:
 
 ## Current limitations
 
-- The sandbox used to prepare this project cannot read the IntelliJ installation
-  jars. The final compile, plugin installation, and live LLM call must be checked
-  on the user's machine.
-- The bundled index was generated from `D:\java` on 2026-10-18.
+- Plugin installation and live model calls must be smoke-tested on a machine
+  with IntelliJ IDEA installed and API access configured.
+- The bundled index was generated from the course PDF slides.
 - Runtime PDF reindexing is performed by the Python script; the plugin imports
   the generated JSON.
 - The local vector is lexical. A real embedding endpoint can be added later
   without changing the citation contract.
 - Citation validation catches invalid document/page pairs, but it cannot prove
   that a sentence is a correct interpretation of the page.
+
+## Sharing and privacy
+
+Do not commit `local.properties`, IDE/build caches, `idea.log`, or API keys.
+The API key is stored per user in IntelliJ `PasswordSafe`.
+
+The bundled index contains text extracted from the course PDFs. Keep this
+repository private and share it only with the authorized course group.
 
 ## Demo script
 

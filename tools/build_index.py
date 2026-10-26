@@ -18,9 +18,6 @@ import unicodedata
 from collections import Counter
 from pathlib import Path
 
-from pypdf import PdfReader
-
-
 DIMENSIONS = 512
 MAX_CHARS = 900
 OVERLAP_CHARS = 120
@@ -83,6 +80,14 @@ def clean_text(text: str, page_number: int) -> str:
 
 
 def extract_pages(pdf_path: Path) -> list[tuple[int, str]]:
+    try:
+        from pypdf import PdfReader
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "pypdf is required to rebuild the index: "
+            "install it with 'python -m pip install pypdf'."
+        ) from exc
+
     reader = PdfReader(str(pdf_path))
     pages: list[tuple[int, str]] = []
     for page_number, page in enumerate(reader.pages, start=1):

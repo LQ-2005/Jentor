@@ -44,8 +44,11 @@ public final class RetrievalHarness {
         System.out.println("TOKENS junit: " + Tokens.tokenize("How do I write a JUnit test?"));
 
         Path indexPath = Path.of(
-                "C:\\Users\\l2005\\Documents\\Codex\\2026-10-17\\xian\\cst3492-ta"
-                        + "\\src\\main\\resources\\index\\course-index.json");
+                "src", "main", "resources", "index", "course-index.json");
+        if (!Files.isRegularFile(indexPath)) {
+            throw new IllegalStateException(
+                    "Run this harness from the project root; missing " + indexPath);
+        }
         CourseIndex index;
         try (InputStream input = Files.newInputStream(indexPath)) {
             index = CourseIndex.load(input);
