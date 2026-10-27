@@ -37,6 +37,12 @@ This is the F0 baseline required for every group.
 - Generation can be stopped. The request carries a cancellation token; the task
   and, where supported, the HTTP request are cancelled. Stale responses cannot
   update the UI or conversation memory.
+- Answers stream into the tool window while they are generated. The client reads
+  server-sent events, so the first words appear immediately instead of after the
+  whole completion. The final answer replaces the streamed preview, because
+  citation repair and the disclosure sentence can rewrite it. Streaming can be
+  disabled in the settings, and the offline mock model streams through the same
+  path, so the UI behaviour can be checked without a key.
 - A compact top bar with course-material details, a more menu, a persistent Mock
   badge, a code-attachment bar, collapsible sources, code blocks with copy
   buttons, copy-answer, and a "new reply" jump button.
@@ -57,8 +63,8 @@ This is the F0 baseline required for every group.
 
 Prerequisites:
 
-- JDK 21
-- IntelliJ IDEA 2025.2 through 2026.1
+- JDK 21 (JDK 25 when building against IntelliJ IDEA 2026.2)
+- IntelliJ IDEA 2025.2 through 2026.2
 
 First copy `local.properties.example` to `local.properties` and set `ideaHome`
 (IntelliJ installation root) and `jdkHome` (JDK 21 root). Do not commit this
@@ -88,7 +94,7 @@ required.
 Build output:
 
 ```text
-build\distributions\cst3492-course-ta-0.4.3.zip
+build\distributions\cst3492-course-ta-0.5.0.zip
 ```
 
 Install it into IntelliJ:
@@ -104,6 +110,8 @@ In IntelliJ:
 1. Open **Settings | Tools | CST3492 Course TA**.
 2. Set the base URL and chat model.
 3. Paste the API key.
+   Streaming is enabled by default; clear **Stream the answer while it is
+   generated** if the endpoint does not support server-sent events.
 4. Open the **Course TA** tool window on the right.
 5. Ask a course question, for example:
    `What is a checked exception?`

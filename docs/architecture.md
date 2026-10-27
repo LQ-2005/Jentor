@@ -21,9 +21,10 @@ Question + selected code
   -> BM25 + vector tie-breaker + title/phrase bonus
   -> top-k chunks + coverage gate
   -> grounded prompt
-  -> OpenAI-compatible chat endpoint
+  -> OpenAI-compatible chat endpoint (server-sent events)
+  -> streamed preview in the tool window
   -> citation validation and one retry
-  -> answer in the tool window
+  -> final answer replaces the preview
 ```
 
 ## Indexing
@@ -110,6 +111,46 @@ candidates are shown only in a collapsible debug section. Clicking a source
 opens the document name, PDF page, and the actual excerpt sent in this request.
 The course index uses PDF page numbers, so citations use `p.`/`pp.` rather than
 mixing `Slide`.
+
+## Streaming
+
+`ChatClient.stream` delivers the answer incrementally through a `StreamSink`.
+`OpenAiCompatibleClient` sends `stream: true` and reads the server-sent events:
+
+- Each `data:` line is parsed as a chunk; only `choices[0].delta.content` (or a
+  `message.content` fallback) is forwarded, so role-only and `finish_reason`
+  chunks produce no visible text.
+- Comment lines such as `: keep-alive` and blank event separators are ignored,
+  and `data: [DONE]` ends the stream.
+- Providers that ignore `stream` and answer with a normal JSON body are handled
+  by reading the whole body once and emitting it as a single delta.
+- Cancelling the token closes the response body, which interrupts the blocking
+  read and surfaces as `CancellationException`.
+
+`AnswerService` treats the deltas as a preview, never as the answer:
+
+- The general-knowledge path may prepend the fallback sentence and
+  `stripDisclosure` removes it from the body, so `Answer.text()` can differ from
+  the concatenated deltas.
+- A citation retry calls `StreamSink.reset()` first, so the rejected draft
+  disappears instead of remaining on screen.
+- `ChatPanel` therefore always renders `Answer.text()` when the request
+  completes, and drops the preview card when the request fails.
+
+The UI never repaints per token. Deltas are appended to a per-request buffer from
+the worker thread, and an 80 ms Swing timer drains that buffer and re-renders the
+message body, which keeps the EDT responsive at high token rates. While the answer
+is streaming, fenced code blocks are painted as plain read-only text areas; the
+real editor components are only created for the final render, so a fast stream
+cannot create and discard an editor several times per second. The per-request
+buffer is replaced on every new request, so a stale response cannot write into the
+current conversation, and `Clear`/stop drop the buffer immediately. The same
+streaming path is used by `MockChatClient`, which splits its deterministic answer
+into small chunks so the behaviour is testable offline.
+
+Streaming can be switched off in the settings; `CourseTaService` then passes
+`StreamSink.NONE`, `AnswerService` falls back to `ChatClient.complete`, and the
+answer appears in one piece as before.
 
 ## Conversation memory
 

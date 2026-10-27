@@ -15,6 +15,7 @@ import com.tongji.cst3492.ta.llm.Answer;
 import com.tongji.cst3492.ta.llm.ChatMessage;
 import com.tongji.cst3492.ta.llm.CitationStatus;
 import com.tongji.cst3492.ta.llm.PromptBuilder;
+import com.tongji.cst3492.ta.llm.StreamSink;
 import com.tongji.cst3492.ta.model.CodeContext;
 import com.tongji.cst3492.ta.model.SourceReference;
 import com.tongji.cst3492.ta.service.ChatRequest;
@@ -61,6 +62,7 @@ import java.util.concurrent.ExecutionException;
 
 public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private static final int MAX_BODY_WIDTH = 760;
+    private static final int STREAM_FLUSH_MS = 80;
 
     private static final JBColor USER_BUBBLE =
             new JBColor(new Color(0xE8F0FE), new Color(0x2B3A55));
@@ -97,12 +99,16 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JMenuItem clearConversationItem = new JMenuItem();
     private final Timer mockTimer;
     private final Timer reflowTimer;
+    private final Timer streamTimer;
 
     private final List<ChatMessage> history = new ArrayList<>();
+    private final StringBuilder streamedText = new StringBuilder();
     private final List<MessageBody> messageBodies = new ArrayList<>();
     private final List<JBTextArea> footnotes = new ArrayList<>();
     private CodeContext pendingCodeContext;
     private ChatRequest currentRequest;
+    private volatile StreamState streamState;
+    private AssistantBubble streamCard;
     private boolean busy;
     private int requestGeneration;
 
@@ -135,6 +141,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         mockTimer.start();
         reflowTimer = new Timer(150, event -> reflowMessages());
         reflowTimer.setRepeats(false);
+        streamTimer = new Timer(STREAM_FLUSH_MS, event -> flushStream());
+        streamTimer.setRepeats(true);
+        streamTimer.setCoalesce(true);
         transcriptScroll.getViewport().addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent event) {
@@ -346,6 +355,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         int generation = ++requestGeneration;
         updateSendButton();
         progressLabel.setText(I18n.t(currentLanguage(), "thinking"));
+        streamState = new StreamState(generation);
+        streamCard = null;
+        streamedText.setLength(0);
+        streamTimer.restart();
 
         ChatRequest request;
         try {
@@ -354,8 +367,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         if (generation == requestGeneration && busy) {
                             progressLabel.setText(stage);
                         }
-                    }));
+                    }), createSink(generation));
         } catch (RuntimeException error) {
+            streamTimer.stop();
+            streamState = null;
             busy = false;
             input.setText(question);
             progressLabel.setText("");
@@ -374,12 +389,16 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     currentRequest = null;
                     busy = false;
                     progressLabel.setText("");
+                    flushStream();
+                    streamTimer.stop();
+                    streamState = null;
                     if (error == null) {
-                        appendAnswer(answer);
+                        finishStreamCard(answer);
                         if (answer.citationStatus() != CitationStatus.FAILED) {
                             rememberTurn(question, answer.text());
                         }
                     } else {
+                        discardStreamCard();
                         input.setText(question);
                         appendError(friendlyError(error), currentLanguage(), question);
                     }
@@ -394,6 +413,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
+        flushStream();
+        streamTimer.stop();
+        streamState = null;
         busy = false;
         progressLabel.setText(I18n.t(currentLanguage(), "stopped"));
         updateSendButton();
@@ -414,6 +436,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private void appendAnswer(Answer answer) {
+        AssistantBubble bubble = newAssistantBubble(answer.text());
+        populateAnswerDetails(bubble.card, answer);
+        addRow(bubble.card, false);
+    }
+
+    private AssistantBubble newAssistantBubble(String text) {
         int width = bodyWidth();
         JPanel card = new JPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -425,11 +453,15 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         role.setFont(role.getFont().deriveFont(Font.BOLD, 11f));
         role.setForeground(ASSISTANT_ROLE);
         bubble.add(role, BorderLayout.NORTH);
-        MessageBody body = new MessageBody(answer.text(), project, width);
+        MessageBody body = new MessageBody(text, project, width);
         messageBodies.add(body);
         bubble.add(body, BorderLayout.CENTER);
         card.add(bubble);
+        return new AssistantBubble(card, body);
+    }
 
+    private void populateAnswerDetails(JPanel card, Answer answer) {
+        int width = bodyWidth();
         JPanel meta = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         meta.setOpaque(false);
         if (answer.citationStatus() != CitationStatus.NOT_APPLICABLE) {
@@ -522,7 +554,104 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             warning.setForeground(JBColor.RED);
             card.add(warning);
         }
-        addRow(card, false);
+    }
+
+    private StreamSink createSink(int generation) {
+        return new StreamSink() {
+            @Override
+            public void append(String delta) {
+                StreamState state = streamState;
+                if (state == null || state.generation != generation
+                        || delta == null || delta.isEmpty()) {
+                    return;
+                }
+                synchronized (state.pending) {
+                    state.pending.append(delta);
+                }
+            }
+
+            @Override
+            public void reset() {
+                StreamState state = streamState;
+                if (state == null || state.generation != generation) {
+                    return;
+                }
+                synchronized (state.pending) {
+                    state.pending.setLength(0);
+                }
+                state.resetRequested = true;
+            }
+        };
+    }
+
+    /** Drains buffered deltas on the EDT and repaints the streaming card. */
+    private void flushStream() {
+        StreamState state = streamState;
+        if (state == null) {
+            return;
+        }
+        String delta;
+        boolean reset;
+        synchronized (state.pending) {
+            reset = state.resetRequested;
+            state.resetRequested = false;
+            delta = state.pending.toString();
+            state.pending.setLength(0);
+        }
+        if (!reset && delta.isEmpty()) {
+            return;
+        }
+        boolean pinned = isAtBottom();
+        if (reset) {
+            streamedText.setLength(0);
+            if (streamCard != null) {
+                streamCard.body.setPreviewText("");
+            }
+        }
+        if (!delta.isEmpty()) {
+            if (streamCard == null) {
+                streamCard = newAssistantBubble("");
+                addRow(streamCard.card, false);
+            }
+            streamedText.append(delta);
+            streamCard.body.setPreviewText(streamedText.toString());
+            streamCard.card.revalidate();
+            streamCard.card.repaint();
+            progressLabel.setText("");
+        }
+        if (pinned) {
+            scrollToBottom();
+        }
+    }
+
+    /** Replaces the streamed preview with the authoritative final answer. */
+    private void finishStreamCard(Answer answer) {
+        AssistantBubble card = streamCard;
+        if (card == null) {
+            appendAnswer(answer);
+            return;
+        }
+        streamCard = null;
+        card.body.setText(answer.text());
+        populateAnswerDetails(card.card, answer);
+        card.card.revalidate();
+        card.card.repaint();
+        if (isAtBottom()) {
+            scrollToBottom();
+        }
+    }
+
+    /** Drops a partially streamed answer, for example after a failed request. */
+    private void discardStreamCard() {
+        AssistantBubble card = streamCard;
+        if (card == null) {
+            return;
+        }
+        streamCard = null;
+        messageBodies.remove(card.body);
+        transcriptPanel.remove(card.card);
+        transcriptPanel.revalidate();
+        transcriptPanel.repaint();
     }
 
     private String citationStatusText(CitationStatus status) {
@@ -681,6 +810,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest = null;
         }
         busy = false;
+        streamTimer.stop();
+        streamState = null;
+        streamCard = null;
+        streamedText.setLength(0);
         history.clear();
         messageBodies.clear();
         footnotes.clear();
@@ -796,6 +929,27 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         mockTimer.stop();
         reflowTimer.stop();
+        streamTimer.stop();
+    }
+
+    private static final class AssistantBubble {
+        private final JPanel card;
+        private final MessageBody body;
+
+        private AssistantBubble(JPanel card, MessageBody body) {
+            this.card = card;
+            this.body = body;
+        }
+    }
+
+    private static final class StreamState {
+        private final int generation;
+        private final StringBuilder pending = new StringBuilder();
+        private volatile boolean resetRequested;
+
+        private StreamState(int generation) {
+            this.generation = generation;
+        }
     }
 
     private static final class BubblePanel extends JPanel {

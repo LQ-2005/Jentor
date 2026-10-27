@@ -30,7 +30,8 @@ public final class MessageBody extends JPanel {
             "(?s)```([A-Za-z0-9_+-]*)\\R(.*?)```");
 
     private final Project project;
-    private final String sourceText;
+    private String sourceText;
+    private boolean preview;
     private int contentWidth;
     private final Font uiFont;
     private final String fontFamily;
@@ -48,6 +49,34 @@ public final class MessageBody extends JPanel {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setOpaque(false);
         render(sourceText);
+    }
+
+    /** Replaces the rendered text with the authoritative final content. */
+    public void setText(String text) {
+        update(text, false);
+    }
+
+    /**
+     * Replaces the text of a message that is still being streamed. Code blocks are
+     * painted as read-only text areas instead of editor components, because this
+     * method is called several times per second and a real editor per frame would
+     * be needlessly expensive.
+     */
+    public void setPreviewText(String text) {
+        update(text, true);
+    }
+
+    private void update(String text, boolean livePreview) {
+        String next = text == null ? "" : text;
+        if (next.equals(sourceText) && livePreview == preview) {
+            return;
+        }
+        sourceText = next;
+        preview = livePreview;
+        removeAll();
+        render(sourceText);
+        revalidate();
+        repaint();
     }
 
     public void setContentWidth(int width) {
@@ -151,7 +180,7 @@ public final class MessageBody extends JPanel {
 
         FileType fileType = FileTypeManager.getInstance()
                 .getFileTypeByExtension(language.isBlank() ? "txt" : language);
-        if (fileType != null) {
+        if (!preview && fileType != null) {
             try {
                 EditorTextField editor = new EditorTextField(code, project, fileType);
                 editor.setViewer(true);

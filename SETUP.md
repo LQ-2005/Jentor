@@ -1,11 +1,11 @@
 # 组员复现说明
 
-这个工程是一个 IntelliJ IDEA 插件，不是普通 Java 可执行程序。组员需要在本机用 JDK 21 和 IntelliJ IDEA 构建出插件 ZIP，然后从磁盘安装。
+这个工程是一个 IntelliJ IDEA 插件，不是普通 Java 可执行程序。组员需要在本机用 JDK 和 IntelliJ IDEA 构建出插件 ZIP，然后从磁盘安装。
 
 ## 1. 需要准备
 
-- JDK 21
-- IntelliJ IDEA 2025.2 或 2026.1（开发时使用 2026.1 验证）
+- JDK 21；若使用 IntelliJ IDEA 2026.2，则需要 JDK 25（见下方“编译工具链”）
+- IntelliJ IDEA 2025.2 到 2026.2（开发时使用 2026.1 验证）
 - Windows 推荐 PowerShell；macOS/Linux 使用终端
 
 工程已经包含：
@@ -31,7 +31,7 @@ Copy-Item local.properties.example local.properties
 # IntelliJ 安装根目录，里面应该有 bin、lib、plugins
 ideaHome=C:/Program Files/JetBrains/IntelliJ IDEA 2026.1
 
-# JDK 21 根目录
+# JDK 根目录：IDEA 2025.2-2026.1 用 JDK 21，IDEA 2026.2 用 JDK 25
 jdkHome=C:/Program Files/Java/jdk-21
 ```
 
@@ -51,6 +51,12 @@ jdkHome=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
 
 `local.properties` 已被 `.gitignore` 忽略，不要提交，也不要把自己的本机路径发给别人。
 
+### 编译工具链
+
+编译器必须能读取它所依赖的 IntelliJ jar：IDEA 2025.2–2026.1 的 jar 是 Java 21 字节码，IDEA 2026.2 的 jar 是 Java 25 字节码。因此用 2025.2–2026.1 构建时 `jdkHome` 指向 JDK 21，用 2026.2 构建时指向 JDK 25。
+
+`build-plugin.ps1` 会读取 `jdkHome` 里 release 文件的主版本号并自动传 `-PjavaVersion=<主版本>`，不需要手工指定。产物始终是 Java 21 字节码，同一个 ZIP 在两类 IDE 上都能运行。
+
 ## 3. 构建插件
 
 Windows：
@@ -63,7 +69,7 @@ cd <项目目录>
 脚本会从 `local.properties` 读取 `jdkHome`，设置 `JAVA_HOME`，然后执行：
 
 ```powershell
-.\gradlew.bat buildPlugin --offline --stacktrace
+.\gradlew.bat buildPlugin --offline --stacktrace -PjavaVersion=<JDK 主版本>
 ```
 
 macOS/Linux：
@@ -77,7 +83,7 @@ chmod +x gradlew   # zip 若丢失可执行权限时使用
 成功后会生成：
 
 ```text
-build/distributions/cst3492-course-ta-0.4.3.zip
+build/distributions/cst3492-course-ta-0.5.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；依赖本身不需要额外下载，Jackson 已在 `lib/` 中。
@@ -111,7 +117,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/cst3492-course-ta-0.4.3.zip`；
+3. 选择 `build/distributions/cst3492-course-ta-0.5.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Course TA`。
 
@@ -164,13 +170,17 @@ python tools/build_index.py `
 
 确认 `ideaHome` 指向的目录有 `lib/*.jar`。如果组员使用的 IDEA 版本差异较大，先把 IDE 升级到 2026.1，或把 `local.properties` 指向 2026.1。
 
+### `类文件具有错误的版本 69.0, 应为 65.0`
+
+用 JDK 21 去编译 IDEA 2026.2 的 jar（Java 25 字节码）。把 `jdkHome` 换成 JDK 25 后重新构建；`build-plugin.ps1` 会自动选择对应工具链。
+
 ### Gradle wrapper 下载失败
 
 可以打开 IntelliJ 的 Gradle 工具窗口使用 IDE 自带 Gradle，或在有网络的网络环境先完成一次 Gradle 下载。
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 0.4.3 ZIP
+- [ ] `build-plugin.ps1` 成功生成 0.5.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Course TA
 - [ ] Mock 模式能回答课程问题

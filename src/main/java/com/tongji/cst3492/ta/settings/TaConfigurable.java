@@ -27,6 +27,8 @@ public final class TaConfigurable implements Configurable {
             new JComboBox<>(new String[]{"中文", "English"});
     private final JCheckBox useMockModel =
             new JCheckBox("Use offline mock model (no API key) / 使用离线 Mock 模型（无需 API Key）");
+    private final JCheckBox streamOutput =
+            new JCheckBox("Stream the answer while it is generated / 流式输出回答（边生成边显示）");
 
     @Override
     public String getDisplayName() {
@@ -57,6 +59,7 @@ public final class TaConfigurable implements Configurable {
                         "Max context chars / 最大上下文字符数:"), maxContextChars, 1, false)
                 .addLabeledComponent(new JBLabel("Temperature / 温度:"), temperature, 1, false)
                 .addComponent(useMockModel)
+                .addComponent(streamOutput)
                 .addComponent(new JBLabel(
                         "<html><body style='width:420px'>"
                                 + "Use an OpenAI-compatible endpoint. The API key is stored in "
@@ -84,6 +87,7 @@ public final class TaConfigurable implements Configurable {
                 || !maxTokens.getText().equals(String.valueOf(state.maxTokens))
                 || language.getSelectedIndex() != ("zh".equals(state.language) ? 0 : 1)
                 || useMockModel.isSelected() != state.useMockModel
+                || streamOutput.isSelected() != state.streamOutput
                 || !new String(apiKey.getPassword()).equals(nullToEmpty(settings.getApiKey()));
     }
 
@@ -99,6 +103,7 @@ public final class TaConfigurable implements Configurable {
         state.maxTokens = parseInt(maxTokens, "Max output tokens", 128, 8000);
         state.language = language.getSelectedIndex() == 0 ? "zh" : "en";
         state.useMockModel = useMockModel.isSelected();
+        state.streamOutput = streamOutput.isSelected();
         settings.setApiKey(new String(apiKey.getPassword()).trim());
     }
 
@@ -115,6 +120,7 @@ public final class TaConfigurable implements Configurable {
         maxTokens.setText(String.valueOf(state.maxTokens));
         language.setSelectedIndex("zh".equals(state.language) ? 0 : 1);
         useMockModel.setSelected(state.useMockModel);
+        streamOutput.setSelected(state.streamOutput);
     }
 
     @Override

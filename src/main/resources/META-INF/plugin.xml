@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.tongji.cst3492.ta</id>
     <name>CST3492 Course TA</name>
-    <version>0.4.3</version>
+    <version>0.5.0</version>
     <vendor>Tongji University</vendor>
 
     <description>
@@ -10,7 +10,7 @@
         and can attach the code selected in the editor to the conversation.
     </description>
 
-    <idea-version since-build="252" until-build="261.*"/>
+    <idea-version since-build="252" until-build="262.*"/>
 
     <depends>com.intellij.modules.platform</depends>
 

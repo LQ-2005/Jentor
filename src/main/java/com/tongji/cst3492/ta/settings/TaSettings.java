@@ -51,5 +51,6 @@ public final class TaSettings implements PersistentStateComponent<TaSettings.Sta
         public double temperature = 0.2;
         public int maxTokens = 1500;
         public boolean useMockModel = false;
+        public boolean streamOutput = true;
     }
 }

@@ -3,7 +3,12 @@ plugins {
 }
 
 group = 'com.tongji.cst3492'
-version = '0.4.3'
+version = '0.5.0'
+
+// The compiler toolchain must be able to read the IntelliJ jars it compiles
+// against. IntelliJ 2025.2-2026.1 ship Java 21 class files, 2026.2 ships Java 25
+// class files, so a teammate on newer IDE builds passes -PjavaVersion=25.
+def javaVersion = (providers.gradleProperty('javaVersion').orNull ?: '21') as int
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
@@ -48,8 +53,12 @@ dependencies {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(javaVersion)
     }
+    // Always emit Java 21 bytecode so one ZIP runs on both the Java 21 based
+    // IDEs and the Java 25 based ones.
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -39,6 +39,42 @@ public final class AnswerService {
             List<ChatMessage> history,
             CancellationToken token,
             Consumer<String> stageListener) throws IOException {
+        return answer(
+                question,
+                codeContext,
+                config,
+                topK,
+                coverageThreshold,
+                maxContextChars,
+                language,
+                history,
+                token,
+                stageListener,
+                StreamSink.NONE);
+    }
+
+    /**
+     * Same pipeline as the ten-argument overload, but reports the answer text
+     * incrementally while it is generated.
+     *
+     * <p>The deltas are a best-effort preview: the returned {@link Answer#text()}
+     * stays authoritative because the disclosure sentence, citation repair, and
+     * trimming can rewrite it. The sink is also reset before a citation retry so
+     * the UI can discard the rejected draft.</p>
+     */
+    public Answer answer(
+            String question,
+            CodeContext codeContext,
+            LlmConfig config,
+            int topK,
+            double coverageThreshold,
+            int maxContextChars,
+            String language,
+            List<ChatMessage> history,
+            CancellationToken token,
+            Consumer<String> stageListener,
+            StreamSink streamSink) throws IOException {
+        StreamSink sink = streamSink == null ? StreamSink.NONE : streamSink;
         List<ChatMessage> safeHistory = history == null ? List.of() : history;
         token.throwIfCancelled();
         stage(stageListener, language, "retrieve");
@@ -50,11 +86,12 @@ public final class AnswerService {
 
         if (!grounded) {
             stage(stageListener, language, "generate");
-            String text = chatClient.complete(
+            String text = generate(
                     config,
                     promptBuilder.buildGeneralMessages(
                             question, codeContext, language, safeHistory),
-                    token);
+                    token,
+                    sink);
             String fallback = "zh".equals(language)
                     ? PromptBuilder.FALLBACK_SENTENCE_ZH
                     : PromptBuilder.FALLBACK_SENTENCE;
@@ -73,18 +110,20 @@ public final class AnswerService {
         }
 
         stage(stageListener, language, "generate");
-        String text = chatClient.complete(
+        String text = generate(
                 config,
                 promptBuilder.buildGroundedMessages(
                         question, codeContext, ragContext, maxContextChars, language, safeHistory),
-                token);
+                token,
+                sink);
         token.throwIfCancelled();
         stage(stageListener, language, "validate");
         List<String> invalid = citationValidator.invalidCitations(text, ragContext.blocks());
         List<String> warnings = new ArrayList<>();
         if (!invalid.isEmpty()) {
             stage(stageListener, language, "repair");
-            String retried = chatClient.complete(
+            sink.reset();
+            String retried = generate(
                     config,
                     promptBuilder.buildCitationRetryMessages(
                             question,
@@ -95,7 +134,8 @@ public final class AnswerService {
                             maxContextChars,
                             language,
                             safeHistory),
-                    token);
+                    token,
+                    sink);
             token.throwIfCancelled();
             List<String> stillInvalid = citationValidator.invalidCitations(
                     retried, ragContext.blocks());
@@ -145,6 +185,17 @@ public final class AnswerService {
                 status,
                 warnings,
                 disclosure);
+    }
+
+    private String generate(
+            LlmConfig config,
+            List<ChatMessage> messages,
+            CancellationToken token,
+            StreamSink sink) throws IOException {
+        if (sink == StreamSink.NONE || !chatClient.supportsStreaming()) {
+            return chatClient.complete(config, messages, token);
+        }
+        return chatClient.stream(config, messages, token, sink);
     }
 
     private String stripDisclosure(String text, String disclosure) {

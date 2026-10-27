@@ -11,6 +11,7 @@ import com.tongji.cst3492.ta.llm.ChatMessage;
 import com.tongji.cst3492.ta.llm.LlmConfig;
 import com.tongji.cst3492.ta.llm.MockChatClient;
 import com.tongji.cst3492.ta.llm.OpenAiCompatibleClient;
+import com.tongji.cst3492.ta.llm.StreamSink;
 import com.tongji.cst3492.ta.model.CodeContext;
 import com.tongji.cst3492.ta.model.CourseIndex;
 import com.tongji.cst3492.ta.model.DocumentMeta;
@@ -86,6 +87,19 @@ public final class CourseTaService {
             CodeContext codeContext,
             List<ChatMessage> history,
             Consumer<String> stageListener) {
+        return ask(question, codeContext, history, stageListener, StreamSink.NONE);
+    }
+
+    /**
+     * Asks a question and reports the answer text incrementally through the sink.
+     * The sink is ignored when the user disabled streaming in the settings.
+     */
+    public ChatRequest ask(
+            String question,
+            CodeContext codeContext,
+            List<ChatMessage> history,
+            Consumer<String> stageListener,
+            StreamSink streamSink) {
         TaSettings settings = TaSettings.getInstance();
         TaSettings.State state = settings.getState();
         boolean mock = state.useMockModel;
@@ -108,6 +122,7 @@ public final class CourseTaService {
         double coverageThreshold = state.coverageThreshold;
         int maxContextChars = state.maxContextChars;
         AnswerService answerService = getAnswerService(mock);
+        StreamSink sink = state.streamOutput ? streamSink : StreamSink.NONE;
         CancellationToken token = new CancellationToken();
         CompletableFuture<Answer> result = new CompletableFuture<>();
         Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
@@ -123,7 +138,8 @@ public final class CourseTaService {
                         language,
                         history,
                         token,
-                        stageListener);
+                        stageListener,
+                        sink);
                 token.throwIfCancelled();
                 result.complete(answer);
             } catch (CancellationException cancelled) {
