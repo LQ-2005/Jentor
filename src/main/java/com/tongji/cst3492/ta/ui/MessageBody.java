@@ -1,38 +1,30 @@
 package com.tongji.cst3492.ta.ui;
 
-import com.intellij.openapi.fileTypes.FileType;
-import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.ui.EditorTextField;
-import com.intellij.ui.JBColor;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
-import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JEditorPane;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.UIManager;
-import java.awt.BorderLayout;
-import java.awt.Color;
+import javax.swing.text.Element;
+import javax.swing.text.View;
+import javax.swing.text.ViewFactory;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.InlineView;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.FontMetrics;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.awt.Insets;
 
 public final class MessageBody extends JPanel {
-    private static final Pattern CODE_FENCE = Pattern.compile(
-            "(?s)```([A-Za-z0-9_+-]*)\\R(.*?)```");
-
     private final Project project;
     private String sourceText;
     private boolean preview;
     private int contentWidth;
+    private int naturalContentWidth;
     private final Font uiFont;
     private final String fontFamily;
 
@@ -40,7 +32,7 @@ public final class MessageBody extends JPanel {
         super();
         this.project = project;
         this.sourceText = text == null ? "" : text;
-        this.contentWidth = Math.max(200, contentWidth);
+        this.contentWidth = Math.max(1, contentWidth);
         Font labelFont = UIManager.getFont("Label.font");
         this.uiFont = labelFont != null
                 ? labelFont.deriveFont(13f)
@@ -80,7 +72,7 @@ public final class MessageBody extends JPanel {
     }
 
     public void setContentWidth(int width) {
-        int newWidth = Math.max(200, width);
+        int newWidth = Math.max(1, width);
         if (newWidth == contentWidth) {
             return;
         }
@@ -91,39 +83,69 @@ public final class MessageBody extends JPanel {
         repaint();
     }
 
-    private void render(String text) {
-        Matcher matcher = CODE_FENCE.matcher(text);
-        int last = 0;
-        while (matcher.find()) {
-            addProse(text.substring(last, matcher.start()));
-            addCode(matcher.group(1).trim(), matcher.group(2));
-            last = matcher.end();
-        }
-        addProse(text.substring(last));
+    /** Natural rendered width, capped to the space available for the message. */
+    public int preferredContentWidth(int maxWidth) {
+        return Math.min(Math.max(1, maxWidth), Math.max(1, naturalContentWidth));
     }
 
-    private void addProse(String text) {
-        String trimmed = text.trim();
+    @Override
+    public Dimension getMaximumSize() {
+        return new Dimension(contentWidth, getPreferredSize().height);
+    }
+
+    private void render(String text) {
+        naturalContentWidth = 0;
+        for (MarkdownContent.Part part : MarkdownContent.parse(text)) {
+            if (part.code() != null) {
+                addCode(part.language(), part.code());
+            } else {
+                addProse(part.html());
+            }
+        }
+    }
+
+    private void addProse(String html) {
+        String trimmed = html.trim();
         if (trimmed.isEmpty()) {
             return;
         }
         JEditorPane pane = new JEditorPane();
-        pane.setContentType("text/html");
+        pane.setEditorKit(new WrappingHtmlEditorKit());
         pane.setEditable(false);
         pane.setOpaque(false);
         pane.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
         pane.setFont(uiFont);
+        pane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
         TextContextMenu.install(pane);
         try {
-            pane.setText("<html><body><font face=\"" + escapeAttribute(fontFamily) + "\">"
-                    + proseHtml(trimmed) + "</font></body></html>");
-            pane.setSize(new Dimension(contentWidth, Short.MAX_VALUE));
-            Dimension preferred = pane.getPreferredSize();
-            int height = Math.max(18, (int) Math.ceil(preferred.height * 1.15) + 8);
-            pane.setPreferredSize(new Dimension(contentWidth, height));
+            pane.setText("<html><head><style>body { margin: 0; } "
+                    + "p { margin-top: 0; margin-bottom: 6px; } "
+                    + "h1, h2, h3, h4, h5, h6 { margin-top: 8px; margin-bottom: 6px; } "
+                    + "h1 { font-size: 145%; } h2 { font-size: 130%; } "
+                    + "h3 { font-size: 115%; } h4, h5, h6 { font-size: 105%; } "
+                    + "ul, ol { margin-top: 2px; margin-bottom: 6px; margin-left: 18px; } "
+                    + "li { margin-bottom: 3px; } "
+                    + "blockquote { margin-left: 12px; margin-right: 4px; } "
+                    + "code { font-family: Monospaced; } "
+                    + "table { margin-top: 6px; margin-bottom: 6px; } "
+                    + "th, td { border: 1px solid #808080; padding: 4px; }"
+                    + "</style></head>"
+                    + "<body><font face=\"" + escapeAttribute(fontFamily) + "\">"
+                    + trimmed + "</font></body></html>");
+            Insets insets = pane.getInsets();
+            View root = pane.getUI().getRootView(pane);
+            naturalContentWidth = Math.max(naturalContentWidth,
+                    (int) Math.ceil(root.getPreferredSpan(View.X_AXIS))
+                            + insets.left + insets.right + 2);
+            root.setSize(Math.max(1, contentWidth - insets.left - insets.right),
+                    Float.MAX_VALUE);
+            int height = Math.max(pane.getFontMetrics(uiFont).getHeight(),
+                    (int) Math.ceil(root.getPreferredSpan(View.Y_AXIS)))
+                    + insets.top + insets.bottom + 2;
+            setBlockSize(pane, height);
             add(pane);
         } catch (Throwable error) {
-            JTextArea fallback = new JTextArea(trimmed);
+            JTextArea fallback = new JTextArea(sourceText);
             fallback.setEditable(false);
             fallback.setLineWrap(true);
             fallback.setWrapStyleWord(true);
@@ -133,110 +155,66 @@ public final class MessageBody extends JPanel {
             TextContextMenu.install(fallback);
             fallback.setSize(new Dimension(contentWidth, Short.MAX_VALUE));
             FontMetrics metrics = fallback.getFontMetrics(fallback.getFont());
-            int width = contentWidth;
             int textWidth = 0;
-            for (String line : trimmed.split("\\R", -1)) {
+            for (String line : sourceText.split("\\R", -1)) {
                 textWidth = Math.max(textWidth, metrics.stringWidth(line));
             }
-            width = Math.min(contentWidth, Math.max(160, textWidth + 12));
-            fallback.setSize(width, Short.MAX_VALUE);
-            fallback.setPreferredSize(new Dimension(width, fallback.getPreferredSize().height));
+            naturalContentWidth = Math.max(naturalContentWidth, textWidth + 2);
+            setBlockSize(fallback, Math.max(metrics.getHeight(),
+                    fallback.getPreferredSize().height));
             add(fallback);
         }
     }
 
     private void addCode(String language, String code) {
-        JPanel card = new JPanel(new BorderLayout(4, 4));
-        card.setOpaque(false);
-        card.setBorder(BorderFactory.createEmptyBorder(2, 0, 6, 0));
-
-        JPanel header = new JPanel(new BorderLayout());
-        header.setOpaque(false);
-        JLabel languageLabel = new JLabel(language.isBlank() ? "code" : language);
-        languageLabel.setFont(languageLabel.getFont().deriveFont(Font.PLAIN, 11f));
-        languageLabel.setForeground(JBColor.GRAY);
-        header.add(languageLabel, BorderLayout.WEST);
-
-        JButton copy = new JButton("Copy / 复制");
-        copy.setFont(copy.getFont().deriveFont(11f));
-        copy.addActionListener(event -> Toolkit.getDefaultToolkit()
-                .getSystemClipboard()
-                .setContents(new StringSelection(code), null));
-        header.add(copy, BorderLayout.EAST);
-        card.add(header, BorderLayout.NORTH);
-
-        int lines = Math.max(1, code.split("\\R", -1).length);
-        int height = Math.min(360, Math.max(80, lines * 18 + 18));
-        JTextArea fallback = new JTextArea(code);
-        fallback.setEditable(false);
-        fallback.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        fallback.setBackground(new JBColor(
-                new java.awt.Color(0xF4F6F8),
-                new java.awt.Color(0x1E1F22)));
-        Color foreground = UIManager.getColor("Label.foreground");
-        fallback.setForeground(foreground != null ? foreground : Color.BLACK);
-        fallback.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
-        fallback.setPreferredSize(new Dimension(contentWidth, height));
-
-        FileType fileType = FileTypeManager.getInstance()
-                .getFileTypeByExtension(language.isBlank() ? "txt" : language);
-        if (!preview && fileType != null) {
-            try {
-                EditorTextField editor = new EditorTextField(code, project, fileType);
-                editor.setViewer(true);
-                editor.setOneLineMode(false);
-                editor.setPreferredSize(new Dimension(contentWidth, height));
-                card.add(editor, BorderLayout.CENTER);
-            } catch (Throwable error) {
-                card.add(fallback, BorderLayout.CENTER);
-            }
-        } else {
-            card.add(fallback, BorderLayout.CENTER);
-        }
-        card.setMaximumSize(new Dimension(contentWidth, height + 40));
-        add(card);
+        CodeBlockPanel card = new CodeBlockPanel(language, code, project, contentWidth, preview);
+        naturalContentWidth = Math.max(naturalContentWidth, card.preferredContentWidth());
+        JPanel spacing = new JPanel();
+        spacing.setLayout(new BoxLayout(spacing, BoxLayout.Y_AXIS));
+        spacing.setOpaque(false);
+        spacing.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+        spacing.add(card);
+        setBlockSize(spacing, spacing.getPreferredSize().height);
+        add(spacing);
     }
 
-    private String proseHtml(String text) {
-        String escaped = escape(text);
-        escaped = escaped.replaceAll("\\*\\*(.+?)\\*\\*", "<b>$1</b>");
-        escaped = escaped.replaceAll("`([^`]+)`", "<code>$1</code>");
-        String[] lines = escaped.split("\\R", -1);
-        StringBuilder html = new StringBuilder();
-        boolean inList = false;
-        for (String line : lines) {
-            String trimmed = line.trim();
-            boolean bullet = trimmed.startsWith("- ") || trimmed.startsWith("* ");
-            if (bullet) {
-                if (!inList) {
-                    html.append("<ul>");
-                    inList = true;
-                }
-                html.append("<li>").append(trimmed.substring(2)).append("</li>");
-            } else {
-                if (inList) {
-                    html.append("</ul>");
-                    inList = false;
-                }
-                if (trimmed.isEmpty()) {
-                    html.append("<br/>");
-                } else {
-                    html.append("<p>").append(trimmed).append("</p>");
-                }
-            }
-        }
-        if (inList) {
-            html.append("</ul>");
-        }
-        return html.toString();
+    private void setBlockSize(JComponent component, int height) {
+        int blockHeight = Math.max(1, height);
+        component.setAlignmentX(LEFT_ALIGNMENT);
+        component.setPreferredSize(new Dimension(contentWidth, blockHeight));
+        component.setMinimumSize(new Dimension(1, blockHeight));
+        component.setMaximumSize(new Dimension(contentWidth, blockHeight));
     }
 
-    private String escape(String text) {
-        return text.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
+    /** Lets long URLs and identifiers wrap inside a capped message bubble. */
+    private static final class WrappingHtmlEditorKit extends HTMLEditorKit {
+        private final ViewFactory factory = new HTMLFactory() {
+            @Override
+            public View create(Element element) {
+                View view = super.create(element);
+                if (view instanceof InlineView) {
+                    return new InlineView(element) {
+                        @Override
+                        public float getMinimumSpan(int axis) {
+                            return axis == View.X_AXIS ? 0 : super.getMinimumSpan(axis);
+                        }
+
+                        @Override
+                        public int getBreakWeight(int axis, float position, float length) {
+                            int weight = super.getBreakWeight(axis, position, length);
+                            return axis == View.X_AXIS && weight == View.BadBreakWeight
+                                    ? View.GoodBreakWeight : weight;
+                        }
+                    };
+                }
+                return view;
+            }
+        };
+
+        @Override
+        public ViewFactory getViewFactory() {
+            return factory;
+        }
     }
 
     private String escapeAttribute(String text) {

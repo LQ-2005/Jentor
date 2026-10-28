@@ -4,14 +4,14 @@
 
 ## 1. 需要准备
 
-- JDK 21；若使用 IntelliJ IDEA 2026.2，则需要 JDK 25（见下方“编译工具链”）
+- JDK 21，用于运行 Gradle；若使用 IntelliJ IDEA 2026.2，还需要 JDK 25 编译插件（见下方“编译工具链”）
 - IntelliJ IDEA 2025.2 到 2026.2（开发时使用 2026.1 验证）
 - Windows 推荐 PowerShell；macOS/Linux 使用终端
 
 工程已经包含：
 
 - Gradle wrapper；
-- `lib/` 下的 Jackson 依赖；
+- `lib/` 下的 Jackson 和 CommonMark 依赖；
 - 预生成的课程索引 `src/main/resources/index/course-index.json`；
 - 构建脚本 `build-plugin.ps1`。
 
@@ -33,6 +33,9 @@ ideaHome=C:/Program Files/JetBrains/IntelliJ IDEA 2026.1
 
 # JDK 根目录：IDEA 2025.2-2026.1 用 JDK 21，IDEA 2026.2 用 JDK 25
 jdkHome=C:/Program Files/Java/jdk-21
+
+# 可选：运行 Gradle 的 JDK，推荐 21；脚本未能自动找到时显式设置
+# gradleJdkHome=C:/Program Files/Java/jdk-21
 ```
 
 Windows 上常见路径：
@@ -55,7 +58,19 @@ jdkHome=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
 
 编译器必须能读取它所依赖的 IntelliJ jar：IDEA 2025.2–2026.1 的 jar 是 Java 21 字节码，IDEA 2026.2 的 jar 是 Java 25 字节码。因此用 2025.2–2026.1 构建时 `jdkHome` 指向 JDK 21，用 2026.2 构建时指向 JDK 25。
 
-`build-plugin.ps1` 会读取 `jdkHome` 里 release 文件的主版本号并自动传 `-PjavaVersion=<主版本>`，不需要手工指定。产物始终是 Java 21 字节码，同一个 ZIP 在两类 IDE 上都能运行。
+`jdkHome` 指定的是**编译器**。`build-plugin.ps1` 会读取它的 `release` 文件并自动传入编译器版本和安装路径，不需要手工指定。产物始终是 Java 21 字节码，同一个 ZIP 在两类 IDE 上都能运行。
+
+**运行 Gradle 的 JDK 与编译器分开选择。** 当前 wrapper 是 Gradle 8.14.2，不能用 Java 25 运行。脚本接受 JDK 17–24 作为 Gradle 运行环境，推荐 JDK 21。可以在 `local.properties` 中显式设置 `gradleJdkHome`；否则脚本先检查原有 `JAVA_HOME`、兼容的 `jdkHome`，再搜索常见安装目录并优先选择 JDK 21。未找到时会给出配置提示。
+
+使用 IDEA 2026.2 时，例如：
+
+```properties
+ideaHome=C:/Program Files/JetBrains/IntelliJ IDEA 2026.2
+jdkHome=C:/Program Files/JetBrains/IntelliJ IDEA 2026.2/jbr
+gradleJdkHome=C:/Program Files/Java/jdk-21
+```
+
+这里 IDEA 自带的 JBR 25 负责编译，独立安装的 JDK 21 负责运行 Gradle。
 
 ## 3. 构建插件
 
@@ -66,11 +81,16 @@ cd <项目目录>
 .\build-plugin.ps1
 ```
 
-脚本会从 `local.properties` 读取 `jdkHome`，设置 `JAVA_HOME`，然后执行：
+脚本会从 `local.properties` 读取编译器路径，选择运行 Gradle 的 JDK，并显式传入两者：
 
 ```powershell
-.\gradlew.bat buildPlugin --offline --stacktrace -PjavaVersion=<JDK 主版本>
+.\gradlew.bat buildPlugin --offline --stacktrace `
+  "-Dorg.gradle.java.home=<Gradle 运行 JDK 路径>" `
+  "-PjavaVersion=<编译器 JDK 主版本>" `
+  "-Porg.gradle.java.installations.paths=<编译器 JDK 路径>"
 ```
+
+脚本结束后会恢复调用前的 `JAVA_HOME` 和工作目录。
 
 macOS/Linux：
 
@@ -80,13 +100,23 @@ chmod +x gradlew   # zip 若丢失可执行权限时使用
 ./gradlew buildPlugin --offline --stacktrace
 ```
 
+如果使用 IDEA 2026.2，运行 Gradle 的 `JAVA_HOME` 仍指向 JDK 21，另行传入 JDK 25 编译器路径：
+
+```bash
+export JAVA_HOME=/path/to/jdk-21
+./gradlew buildPlugin --offline --stacktrace \
+  "-Dorg.gradle.java.home=$JAVA_HOME" \
+  -PjavaVersion=25 \
+  "-Porg.gradle.java.installations.paths=/path/to/jdk-25"
+```
+
 成功后会生成：
 
 ```text
 build/distributions/cst3492-course-ta-0.5.0.zip
 ```
 
-如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；依赖本身不需要额外下载，Jackson 已在 `lib/` 中。
+如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
 
 ## 4. 在 IDEA 中构建
 
@@ -95,7 +125,7 @@ build/distributions/cst3492-course-ta-0.5.0.zip
 1. `File → Open` 打开项目目录；
 2. `Settings → Build, Execution, Deployment → Build Tools → Gradle`，把 Gradle JVM 设为 JDK 21；
 3. 等待 Gradle sync；
-4. 在 Gradle 工具窗口执行 `buildPlugin`，或在 Terminal 运行 `.\gradlew.bat buildPlugin --offline`。
+4. Windows 上在 Terminal 运行 `.\build-plugin.ps1`。若直接在 Gradle 工具窗口构建 IDEA 2026.2 插件，还需传入 `-PjavaVersion=25` 和 `-Porg.gradle.java.installations.paths=<JDK 25 路径>`；Gradle JVM 保持为 JDK 21。
 
 工程只使用 Gradle 内置 `java` 插件，不使用 IntelliJ Platform Gradle 插件或 Kotlin DSL。
 
@@ -164,7 +194,7 @@ python tools/build_index.py `
 
 ### 找不到 JDK 21
 
-检查 `local.properties` 的 `jdkHome`，或设置 `JAVA_HOME`。IDEA 中还要把 Gradle JVM 设为 JDK 21。
+安装 JDK 21，并在 `local.properties` 中设置 `gradleJdkHome`，或把 `JAVA_HOME` 指向 JDK 21。IDEA 中也要把 Gradle JVM 设为 JDK 21。`jdkHome` 则继续按编译目标选择 21 或 25。
 
 ### `compileJava` 报 IntelliJ API 找不到
 
@@ -173,6 +203,10 @@ python tools/build_index.py `
 ### `类文件具有错误的版本 69.0, 应为 65.0`
 
 用 JDK 21 去编译 IDEA 2026.2 的 jar（Java 25 字节码）。把 `jdkHome` 换成 JDK 25 后重新构建；`build-plugin.ps1` 会自动选择对应工具链。
+
+### `_BuildScript_ Unsupported class file major version 69`
+
+这是 Java 25 被用于运行 Gradle 8.14.2 时的构建脚本解析错误。使用更新后的 `build-plugin.ps1`，让 Gradle 运行在 JDK 21；必要时在 `local.properties` 中设置 `gradleJdkHome`。如果编译目标是 IDEA 2026.2，`jdkHome` 仍应指向 JDK 25。直接从 IDEA 的 Gradle 工具窗口执行时，也要确认 Gradle JVM 为 JDK 21。
 
 ### Gradle wrapper 下载失败
 

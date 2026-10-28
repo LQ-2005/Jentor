@@ -3,6 +3,14 @@ package com.tongji.cst3492.ta.llm;
 import com.tongji.cst3492.ta.model.Chunk;
 import com.tongji.cst3492.ta.model.ContextBlock;
 import com.tongji.cst3492.ta.model.SourceReference;
+import org.commonmark.node.AbstractVisitor;
+import org.commonmark.node.HardLineBreak;
+import org.commonmark.node.Heading;
+import org.commonmark.node.Node;
+import org.commonmark.node.Paragraph;
+import org.commonmark.node.SoftLineBreak;
+import org.commonmark.node.Text;
+import org.commonmark.parser.Parser;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,14 +21,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class CitationValidator {
+    private static final Parser MARKDOWN = Parser.builder().build();
     private static final Pattern CITATION_PATTERN = Pattern.compile(
             "\\[([^,\\]]+),\\s*(?:p\\.|pp\\.)\\s*(\\d+)(?:\\s*-\\s*(\\d+))?\\]",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern GENERAL_TITLE = sectionPattern("General supplement", "通用补充");
+    private static final Pattern COURSE_TITLE = sectionPattern("Course basis", "课程依据");
 
     public record Citation(String raw, String document, int startPage, int endPage) {
     }
 
     public List<Citation> parse(String answer) {
+        return analyze(answer).citations;
+    }
+
+    private static List<Citation> parseText(String answer) {
         List<Citation> citations = new ArrayList<>();
         if (answer == null || answer.isBlank()) {
             return citations;
@@ -43,7 +58,8 @@ public final class CitationValidator {
      * contained no citation and did not explicitly switch to general knowledge.
      */
     public List<String> invalidCitations(String answer, List<ContextBlock> blocks) {
-        List<Citation> citations = parse(answer);
+        Analysis analysis = analyze(answer);
+        List<Citation> citations = analysis.citations;
         List<String> invalid = new ArrayList<>();
         if (citations.isEmpty()) {
             if (!hasFallbackSentence(answer)) {
@@ -56,7 +72,7 @@ public final class CitationValidator {
                 invalid.add(citation.raw());
             }
         }
-        if (hasCitationInGeneralSection(answer)) {
+        if (analysis.hasGeneralCitation) {
             invalid.add("CITATION_IN_GENERAL_SECTION");
         }
         return invalid;
@@ -68,12 +84,7 @@ public final class CitationValidator {
      */
     public List<SourceReference> citedSources(String answer, List<ContextBlock> blocks) {
         Map<String, SourceReference> sources = new LinkedHashMap<>();
-        String sourceText = answer == null ? "" : answer;
-        int generalIndex = generalSectionIndex(sourceText);
-        if (generalIndex >= 0) {
-            sourceText = sourceText.substring(0, generalIndex);
-        }
-        for (Citation citation : parse(sourceText)) {
+        for (Citation citation : analyze(answer).courseCitations) {
             ContextBlock block = matchingBlock(citation, blocks);
             if (block == null) {
                 continue;
@@ -102,28 +113,109 @@ public final class CitationValidator {
     }
 
     public boolean hasCourseSection(String answer) {
-        if (answer == null) {
-            return false;
-        }
-        String lower = answer.toLowerCase(Locale.ROOT);
-        return answer.contains("课程依据") || lower.contains("course basis");
+        return analyze(answer).hasCourseSection;
     }
 
     public boolean hasCitationInGeneralSection(String answer) {
-        if (answer == null) {
-            return false;
-        }
-        int index = generalSectionIndex(answer);
-        return index >= 0 && !parse(answer.substring(index)).isEmpty();
+        return analyze(answer).hasGeneralCitation;
     }
 
-    private int generalSectionIndex(String answer) {
-        String lower = answer.toLowerCase(Locale.ROOT);
-        int chinese = answer.indexOf("通用补充");
-        int english = lower.indexOf("general supplement");
-        return chinese >= 0 && english >= 0
-                ? Math.min(chinese, english)
-                : Math.max(chinese, english);
+    private static Pattern sectionPattern(String english, String chinese) {
+        return Pattern.compile("^(?:" + english + "|" + chinese
+                + ")(?:\\s*[:：/（(—–-].*)?$", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    private static String sectionTitle(String line) {
+        return line.strip().replaceFirst("^#{1,6}\\s*", "")
+                .replaceFirst("^\\d+[.)、]\\s*", "").strip();
+    }
+
+    /** Resolve real Markdown sections, rather than treating a keyword as the rest of the answer. */
+    private static Analysis analyze(String answer) {
+        Analysis result = new Analysis();
+        if (answer == null || answer.isBlank()) {
+            return result;
+        }
+        int generalLevel = 0;
+        Node document = MARKDOWN.parse(answer);
+        for (Node node = document.getFirstChild(); node != null; node = node.getNext()) {
+            String text = visibleText(node);
+            if (node instanceof Heading heading) {
+                if (generalLevel > 0 && heading.getLevel() <= generalLevel) {
+                    generalLevel = 0;
+                }
+                String title = sectionTitle(text);
+                if (GENERAL_TITLE.matcher(title).matches() && generalLevel == 0) {
+                    generalLevel = heading.getLevel();
+                }
+                result.hasCourseSection |= COURSE_TITLE.matcher(title).matches();
+                result.add(text, generalLevel > 0);
+            } else if (node instanceof Paragraph) {
+                // Retain support for plain/bold section labels used by existing clients.
+                StringBuilder paragraph = new StringBuilder();
+                for (String line : text.split("\\R", -1)) {
+                    String title = sectionTitle(line);
+                    boolean generalTitle = GENERAL_TITLE.matcher(title).matches();
+                    boolean courseTitle = COURSE_TITLE.matcher(title).matches();
+                    if (generalTitle || courseTitle) {
+                        result.add(paragraph.toString(), generalLevel > 0);
+                        paragraph.setLength(0);
+                        generalLevel = generalTitle ? 2 : 0;
+                        result.hasCourseSection |= courseTitle;
+                    }
+                    paragraph.append(line).append('\n');
+                }
+                result.add(paragraph.toString(), generalLevel > 0);
+            } else {
+                result.add(text, generalLevel > 0);
+            }
+        }
+        return result;
+    }
+
+    private static String visibleText(Node node) {
+        StringBuilder text = new StringBuilder();
+        node.accept(new AbstractVisitor() {
+            @Override
+            public void visit(Text value) {
+                text.append(value.getLiteral());
+            }
+
+            @Override
+            public void visit(SoftLineBreak lineBreak) {
+                text.append('\n');
+            }
+
+            @Override
+            public void visit(HardLineBreak lineBreak) {
+                text.append('\n');
+            }
+
+            @Override
+            public void visit(Paragraph paragraph) {
+                visitChildren(paragraph);
+                text.append('\n');
+            }
+        });
+        // Code nodes store literals, not Text children, so examples do not become references.
+        return text.toString();
+    }
+
+    private static final class Analysis {
+        private final List<Citation> citations = new ArrayList<>();
+        private final List<Citation> courseCitations = new ArrayList<>();
+        private boolean hasCourseSection;
+        private boolean hasGeneralCitation;
+
+        private void add(String text, boolean general) {
+            List<Citation> found = parseText(text);
+            citations.addAll(found);
+            if (general) {
+                hasGeneralCitation |= !found.isEmpty();
+            } else {
+                courseCitations.addAll(found);
+            }
+        }
     }
 
     private ContextBlock matchingBlock(Citation citation, List<ContextBlock> blocks) {

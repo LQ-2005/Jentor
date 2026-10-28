@@ -41,7 +41,9 @@ dependencies {
     implementation files(
         'lib/jackson-databind-2.19.2.jar',
         'lib/jackson-core-2.19.2.jar',
-        'lib/jackson-annotations-2.19.2.jar'
+        'lib/jackson-annotations-2.19.2.jar',
+        'lib/commonmark-0.30.0.jar',
+        'lib/commonmark-ext-gfm-tables-0.30.0.jar'
     )
 
     // Compile against the IDE that is already installed on this machine.

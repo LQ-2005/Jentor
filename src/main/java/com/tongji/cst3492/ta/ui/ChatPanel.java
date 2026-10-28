@@ -49,6 +49,7 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.LayoutManager;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -62,6 +63,8 @@ import java.util.concurrent.ExecutionException;
 
 public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private static final int MAX_BODY_WIDTH = 760;
+    private static final int BUBBLE_HORIZONTAL_PADDING = 10;
+    private static final double USER_WIDTH_RATIO = 0.75;
     private static final int STREAM_FLUSH_MS = 80;
 
     private static final JBColor USER_BUBBLE =
@@ -103,7 +106,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private final List<ChatMessage> history = new ArrayList<>();
     private final StringBuilder streamedText = new StringBuilder();
-    private final List<MessageBody> messageBodies = new ArrayList<>();
+    private final List<MessageLayout> messageBodies = new ArrayList<>();
     private final List<JBTextArea> footnotes = new ArrayList<>();
     private CodeContext pendingCodeContext;
     private ChatRequest currentRequest;
@@ -442,8 +445,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private AssistantBubble newAssistantBubble(String text) {
-        int width = bodyWidth();
-        JPanel card = new JPanel();
+        JPanel card = new ContentSizedPanel(null);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setOpaque(false);
         card.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
@@ -453,8 +455,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         role.setFont(role.getFont().deriveFont(Font.BOLD, 11f));
         role.setForeground(ASSISTANT_ROLE);
         bubble.add(role, BorderLayout.NORTH);
-        MessageBody body = new MessageBody(text, project, width);
-        messageBodies.add(body);
+        MessageBody body = createMessageBody(text, false);
         bubble.add(body, BorderLayout.CENTER);
         card.add(bubble);
         return new AssistantBubble(card, body);
@@ -464,6 +465,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         int width = bodyWidth();
         JPanel meta = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         meta.setOpaque(false);
+        meta.setAlignmentX(LEFT_ALIGNMENT);
         if (answer.citationStatus() != CitationStatus.NOT_APPLICABLE) {
             JBLabel status = new JBLabel(citationStatusText(answer.citationStatus()));
             status.setFont(status.getFont().deriveFont(11f));
@@ -483,11 +485,13 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel sourcesPanel = new JPanel();
         sourcesPanel.setLayout(new BoxLayout(sourcesPanel, BoxLayout.Y_AXIS));
         sourcesPanel.setOpaque(false);
+        sourcesPanel.setAlignmentX(LEFT_ALIGNMENT);
         sourcesPanel.setVisible(false);
         for (SourceReference source : answer.sources()) {
             JButton item = new JButton(source.fileName() + " " + source.locator());
             item.setFont(item.getFont().deriveFont(11f));
             item.setHorizontalAlignment(JButton.LEFT);
+            item.setAlignmentX(LEFT_ALIGNMENT);
             item.addActionListener(event -> showSource(source));
             sourcesPanel.add(item);
         }
@@ -506,6 +510,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel debugPanel = new JPanel();
         debugPanel.setLayout(new BoxLayout(debugPanel, BoxLayout.Y_AXIS));
         debugPanel.setOpaque(false);
+        debugPanel.setAlignmentX(LEFT_ALIGNMENT);
         debugPanel.setVisible(false);
         for (var candidate : answer.debugCandidates()) {
             JBLabel label = new JBLabel(candidate.getChunk().getFileName()
@@ -539,11 +544,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             footnote.setFont(footnote.getFont().deriveFont(Font.ITALIC, 11f));
             footnote.setForeground(JBColor.GRAY);
             footnote.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-            footnote.setSize(new Dimension(width, Short.MAX_VALUE));
-            footnote.setPreferredSize(new Dimension(
-                    width, footnote.getPreferredSize().height));
-            footnote.setMaximumSize(new Dimension(
-                    Integer.MAX_VALUE, footnote.getPreferredSize().height));
+            resizeFootnote(footnote, width);
             footnotes.add(footnote);
             card.add(footnote);
         }
@@ -552,6 +553,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     + String.join("; ", answer.warnings()));
             warning.setFont(warning.getFont().deriveFont(11f));
             warning.setForeground(JBColor.RED);
+            warning.setAlignmentX(LEFT_ALIGNMENT);
             card.add(warning);
         }
     }
@@ -648,7 +650,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             return;
         }
         streamCard = null;
-        messageBodies.remove(card.body);
+        messageBodies.removeIf(message -> message.body() == card.body);
         transcriptPanel.remove(card.card);
         transcriptPanel.revalidate();
         transcriptPanel.repaint();
@@ -673,8 +675,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void appendMessage(String role, String text, boolean warning, boolean userMessage) {
         boolean user = "user".equals(role);
         boolean error = "error".equals(role);
-        int width = bodyWidth();
-        JPanel row = new JPanel(new BorderLayout());
+        JPanel row = new ContentSizedPanel(new BorderLayout());
         row.setOpaque(false);
         row.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
         BubblePanel bubble = new BubblePanel(
@@ -686,12 +687,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         roleLabel.setFont(roleLabel.getFont().deriveFont(Font.BOLD, 11f));
         roleLabel.setForeground(user ? USER_ROLE : error ? JBColor.RED : ASSISTANT_ROLE);
         bubble.add(roleLabel, BorderLayout.NORTH);
-        MessageBody body = new MessageBody(text, project, width);
-        messageBodies.add(body);
+        MessageBody body = createMessageBody(text, user);
         bubble.add(body, BorderLayout.CENTER);
         row.add(bubble, user ? BorderLayout.EAST : BorderLayout.WEST);
-        Dimension preferred = row.getPreferredSize();
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferred.height));
         addRow(row, userMessage);
     }
 
@@ -716,7 +714,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             };
         }
 
-        JPanel row = new JPanel(new BorderLayout());
+        JPanel row = new ContentSizedPanel(new BorderLayout());
         row.setOpaque(false);
         row.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
         BubblePanel bubble = new BubblePanel(ERROR_BUBBLE);
@@ -724,36 +722,60 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         role.setFont(role.getFont().deriveFont(Font.BOLD, 11f));
         role.setForeground(JBColor.RED);
         bubble.add(role, BorderLayout.NORTH);
-        bubble.add(new MessageBody(message, project, bodyWidth()), BorderLayout.CENTER);
+        bubble.add(createMessageBody(message, false), BorderLayout.CENTER);
         JButton actionButton = new JButton(actionLabel);
         actionButton.setFont(actionButton.getFont().deriveFont(11f));
         actionButton.addActionListener(event -> action.run());
         bubble.add(actionButton, BorderLayout.SOUTH);
         row.add(bubble, BorderLayout.WEST);
-        Dimension preferred = row.getPreferredSize();
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, preferred.height));
         addRow(row, false);
     }
 
     private int bodyWidth() {
+        return bodyWidth(false);
+    }
+
+    private int bodyWidth(boolean user) {
         int viewportWidth = transcriptScroll.getViewport().getWidth();
         if (viewportWidth <= 0) {
-            return 680;
+            viewportWidth = 708;
         }
-        return Math.max(240, Math.min(MAX_BODY_WIDTH, viewportWidth - 64));
+        Insets insets = transcriptPanel.getInsets();
+        int available = Math.max(1, viewportWidth - insets.left - insets.right);
+        int bubbleWidth = user ? (int) Math.floor(available * USER_WIDTH_RATIO) : available;
+        return Math.max(1, Math.min(MAX_BODY_WIDTH,
+                bubbleWidth - 2 * BUBBLE_HORIZONTAL_PADDING));
+    }
+
+    private MessageBody createMessageBody(String text, boolean user) {
+        int width = bodyWidth(user);
+        MessageBody body = new MessageBody(text, project, width);
+        if (user) {
+            body.setContentWidth(body.preferredContentWidth(width));
+        }
+        messageBodies.add(new MessageLayout(body, user));
+        return body;
+    }
+
+    private void resizeFootnote(JBTextArea footnote, int width) {
+        // Clear the old explicit height before measuring the newly wrapped text.
+        footnote.setPreferredSize(null);
+        footnote.setSize(new Dimension(width, Short.MAX_VALUE));
+        int height = footnote.getPreferredSize().height;
+        footnote.setPreferredSize(new Dimension(width, height));
+        footnote.setMaximumSize(new Dimension(width, height));
+        footnote.setAlignmentX(LEFT_ALIGNMENT);
     }
 
     private void reflowMessages() {
         int width = bodyWidth();
-        for (MessageBody body : messageBodies) {
-            body.setContentWidth(width);
+        for (MessageLayout message : messageBodies) {
+            int limit = bodyWidth(message.user());
+            MessageBody body = message.body();
+            body.setContentWidth(message.user() ? body.preferredContentWidth(limit) : limit);
         }
         for (JBTextArea footnote : footnotes) {
-            footnote.setSize(new Dimension(width, Short.MAX_VALUE));
-            footnote.setPreferredSize(new Dimension(
-                    width, footnote.getPreferredSize().height));
-            footnote.setMaximumSize(new Dimension(
-                    Integer.MAX_VALUE, footnote.getPreferredSize().height));
+            resizeFootnote(footnote, width);
         }
         transcriptPanel.revalidate();
         transcriptPanel.repaint();
@@ -952,14 +974,42 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
     }
 
-    private static final class BubblePanel extends JPanel {
+    private record MessageLayout(MessageBody body, boolean user) {
+    }
+
+    /** Transcript rows fill the width, but never absorb spare vertical space. */
+    static final class ContentSizedPanel extends JPanel {
+        ContentSizedPanel(LayoutManager layout) {
+            super(layout);
+            setAlignmentX(LEFT_ALIGNMENT);
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+        }
+
+        @Override
+        public Dimension getMinimumSize() {
+            return new Dimension(0, getPreferredSize().height);
+        }
+    }
+
+    static final class BubblePanel extends JPanel {
         private final Color fill;
 
         private BubblePanel(Color fill) {
             this.fill = fill;
             setOpaque(false);
+            setAlignmentX(LEFT_ALIGNMENT);
             setLayout(new BorderLayout(0, 4));
-            setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            setBorder(BorderFactory.createEmptyBorder(
+                    8, BUBBLE_HORIZONTAL_PADDING, 8, BUBBLE_HORIZONTAL_PADDING));
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return getPreferredSize();
         }
 
         @Override

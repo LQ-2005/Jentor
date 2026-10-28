@@ -63,12 +63,14 @@ This is the F0 baseline required for every group.
 
 Prerequisites:
 
-- JDK 21 (JDK 25 when building against IntelliJ IDEA 2026.2)
+- JDK 21 to run Gradle; additionally use JDK 25 to compile against IDEA 2026.2
 - IntelliJ IDEA 2025.2 through 2026.2
 
 First copy `local.properties.example` to `local.properties` and set `ideaHome`
-(IntelliJ installation root) and `jdkHome` (JDK 21 root). Do not commit this
-file. See `SETUP.md` for Windows and macOS examples.
+(IntelliJ installation root) and `jdkHome` (compiler JDK: 21 or 25 as above).
+The script selects a separate compatible JDK to run Gradle; set the optional
+`gradleJdkHome` to your JDK 21 root if needed. Do not commit this file. See
+`SETUP.md` for Windows and macOS examples.
 
 Commands (Windows):
 
@@ -80,11 +82,10 @@ The first build on a machine without Gradle 8.14.2 needs network access to
 download the Gradle wrapper distribution. Plugin dependencies are already in
 `lib/`, so later plugin builds can run offline.
 
-The script reads `jdkHome` and runs:
-
-```powershell
-.\gradlew.bat buildPlugin --offline --stacktrace
-```
+The script reads `jdkHome`, selects the Gradle runtime JDK, and runs
+`buildPlugin --offline --stacktrace` with both JVM and compiler paths explicitly
+configured. Gradle 8.14.2 must not run on Java 25; the compiler can still use JDK
+25 while the generated plugin remains Java 21 bytecode.
 
 `build.gradle` compiles against the IntelliJ installation configured through
 `local.properties`, `IDEA_HOME`, or `-PideaHome`. It uses only Gradle's built-in

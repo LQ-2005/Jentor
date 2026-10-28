@@ -30,6 +30,11 @@ public final class PromptBuilder {
             Structure the answer with a "Course basis" (课程依据) section and, only if
             needed, a separate "General supplement" (通用补充) section. Do not attach
             course citations to general-knowledge content.
+            Use Markdown headings for these sections. Keep every course-derived explanation
+            and its citations in Course basis. A new code example that you write yourself
+            belongs in General supplement, with no course citations in its code, comments,
+            or explanation. Only present an example as a course example if it is actually
+            included in the supplied excerpts; cite that example in Course basis.
             If the excerpts do not contain enough information, use the required fallback
             sentence specified below. Then answer from general Java knowledge and do not
             invent citations.
@@ -93,6 +98,15 @@ public final class PromptBuilder {
                 Do not cite a page that is not listed below. If the excerpts are insufficient,
                 use the required general-knowledge fallback sentence and do not invent citations.
                 """.formatted(String.join("; ", invalidCitations));
+        if (invalidCitations.contains("CITATION_IN_GENERAL_SECTION")) {
+            retryInstruction += """
+                    CITATION_IN_GENERAL_SECTION means that a course citation appeared inside
+                    General supplement. Move course-supported statements AND their citations
+                    into Course basis. Keep any original example and general explanation in
+                    General supplement without course citations. Preserve valid course citations
+                    in Course basis; do not simply remove them from course-derived claims.
+                    """;
+        }
 
         String prompt = "COURSE MATERIAL:\n"
                 + context.text()
@@ -103,7 +117,7 @@ public final class PromptBuilder {
                 + "\n\nUSER QUESTION:\n"
                 + question.trim();
         return buildMessages(
-                ROLE + retryInstruction + languageInstruction(language),
+                ROLE + GROUNDED_RULES + retryInstruction + languageInstruction(language),
                 prompt,
                 history);
     }
