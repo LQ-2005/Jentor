@@ -13,6 +13,7 @@ import com.tongji.cst3492.ta.llm.MockChatClient;
 import com.tongji.cst3492.ta.llm.OpenAiCompatibleClient;
 import com.tongji.cst3492.ta.llm.StreamSink;
 import com.tongji.cst3492.ta.model.CodeContext;
+import com.tongji.cst3492.ta.model.CodeFileSnapshot;
 import com.tongji.cst3492.ta.model.CourseIndex;
 import com.tongji.cst3492.ta.model.DocumentMeta;
 import com.tongji.cst3492.ta.settings.TaSettings;
@@ -24,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
@@ -36,6 +38,7 @@ public final class CourseTaService {
     private volatile AnswerService realAnswerService;
     private volatile AnswerService mockAnswerService;
     private volatile CodeContext pendingContext;
+    private final List<CodeFileSnapshot> pendingFiles = new CopyOnWriteArrayList<>();
 
     public CourseTaService(Project project) {
         this.project = project;
@@ -158,6 +161,20 @@ public final class CourseTaService {
     public CodeContext consumePendingContext() {
         CodeContext current = pendingContext;
         pendingContext = null;
+        return current;
+    }
+
+    /** Queues workspace files for a chat panel that has not been created yet. */
+    public void addPendingFiles(List<CodeFileSnapshot> files) {
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+        pendingFiles.addAll(files);
+    }
+
+    public List<CodeFileSnapshot> consumePendingFiles() {
+        List<CodeFileSnapshot> current = List.copyOf(pendingFiles);
+        pendingFiles.clear();
         return current;
     }
 

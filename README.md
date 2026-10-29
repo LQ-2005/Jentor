@@ -20,6 +20,12 @@ This is the F0 baseline required for every group.
 - Citation states are explicit: validated, failed, or not applicable to a
   general-knowledge answer. The UI says "document and page validated", not
   "answer correctness verified".
+- Citation sections follow the Markdown headings, so a section name mentioned in
+  ordinary prose or inside a code sample no longer moves the boundary, and a
+  citation written in a general-supplement example is not counted as a source.
+- Answer examples that cite nothing are kept apart from course-derived claims:
+  the retry instructions tell the model to move course-supported statements and
+  their citations into Course basis instead of deleting the citations.
 - Sources contain only citations actually used and validated in the answer,
   deduplicated by document/page. Unused retrieval candidates appear only in a
   collapsible debug section.
@@ -43,21 +49,43 @@ This is the F0 baseline required for every group.
   citation repair and the disclosure sentence can rewrite it. Streaming can be
   disabled in the settings, and the offline mock model streams through the same
   path, so the UI behaviour can be checked without a key.
+- Answers render as Markdown with CommonMark, including GFM tables, ordered and
+  nested lists, blockquotes and inline formatting. Raw HTML is escaped, unsafe
+  link schemes are stripped and images are replaced by their alt text, so model
+  output cannot inject markup or load remote content.
 - A compact top bar with course-material details, a more menu, a persistent Mock
-  badge, a code-attachment bar, collapsible sources, code blocks with copy
-  buttons, copy-answer, and a "new reply" jump button.
+  badge, a code-attachment bar, collapsible sources, copy-answer, and a "new
+  reply" jump button.
+- Fenced code blocks become themed rounded cards with a language label, a copy
+  button, their own scrollbars and a 360 px height cap. While an answer streams
+  the card is painted as plain text; the real editor component is created only
+  for the final render.
 - Chat prose and the input use the IDE UI font. Read-only message text and the
   input provide right-click cut/copy/paste/select-all menus.
 - Message bodies and footnotes reflow when the tool window is resized; the
   transcript has no horizontal scrollbar, and top controls wrap onto a second
-  row when space is tight.
+  row when space is tight. User messages are right-aligned bubbles capped at 75%
+  of the transcript width and sized to their content, so a short question no
+  longer spans the panel.
 - A right-click editor action that attaches the selected code, up to 20 lines
   before and after it, the line range, and the nearest Java method/class
   signature. The context stays attached until a new selection or Clear.
+- A **Attach File to Course TA** action on the editor and the Project View that
+  adds workspace source files to the next question. Only text source files are
+  accepted (`.java`, `.kt`, `.groovy`, `.xml`, `.properties`, `.gradle`,
+  `.kts`, `.sql`, `.json`); `.class` and other binary files are refused, and names that
+  look like a credential store are skipped. Up to 5 files are attached, each
+  capped at 400 lines or 4000 characters.
+- Files are read once, when they are attached, and never re-read. The file
+  section is the lowest-priority context after the course material, the selected
+  code and the question, so a stale or unrelated file cannot override a grounded
+  answer. Every answer that used attached files ends with a footnote saying the
+  code is a snapshot and may differ from the current file.
 - Settings for an OpenAI-compatible chat endpoint. The API key is stored with
   IntelliJ `PasswordSafe`, not in the project.
 - An "Import course index" action for importing a rebuilt `course-index.json`.
-- Unit tests and an offline CLI harness for the RAG core.
+- JUnit tests cover retrieval, citation validation, Markdown rendering and the
+  streamed re-render budget; the offline CLI harness checks retrieval quality.
 
 ## Quick start
 
@@ -118,6 +146,9 @@ In IntelliJ:
    `What is a checked exception?`
 6. Select code in the editor, right-click, and choose
    **Ask Course TA about Selection**.
+7. To add a whole file, right-click it in the editor or in the Project View and
+   choose **Attach File to Course TA**. The attachment bar shows how many files
+   are attached; **Remove** detaches them again.
 
 To check the UI and citation path without an API key, open the settings and
 enable **Use offline mock model**. The mock model cites the first retrieved
@@ -198,9 +229,9 @@ Question + selected code
   -> BM25 + vector tie-breaker + title/phrase bonus
   -> top-k chunks with coverage gate
   -> grounded prompt
-  -> OpenAI-compatible chat endpoint
+  -> OpenAI-compatible chat endpoint (streamed)
   -> citation validator (document + page range)
-  -> tool window answer
+  -> Markdown answer in the tool window
 ```
 
 Key packages:
@@ -210,8 +241,9 @@ Key packages:
   retrieval runtime.
 - `llm/PromptBuilder.java`, `llm/CitationValidator.java`,
   `llm/AnswerService.java`: grounded generation and fallback.
-- `ui/ChatPanel.java`, `ui/CourseTaToolWindowFactory.java`,
-  `action/AskSelectionAction.java`: IDE integration.
+- `ui/ChatPanel.java`, `ui/MessageBody.java`, `ui/MarkdownContent.java`,
+  `ui/CodeBlockPanel.java`, `ui/CourseTaToolWindowFactory.java`,
+  `action/AskSelectionAction.java`: IDE integration and answer rendering.
 - `settings/TaSettings.java`, `settings/TaConfigurable.java`: configuration.
 
 ## Current limitations
@@ -233,6 +265,19 @@ The API key is stored per user in IntelliJ `PasswordSafe`.
 
 The bundled index contains text extracted from the course PDFs. Keep this
 repository private and share it only with the authorized course group.
+
+## Documentation convention
+
+This file describes what the plugin does; `docs/architecture.md` describes how it
+works. Every feature or behaviour change updates the README in the same pass as
+the code:
+
+- add one bullet under **What is implemented**, in the existing style, including
+  any limit the user needs to know about;
+- update **Quick start**, **API configuration** or the build section when the
+  change alters commands, settings or requirements;
+- record a new runtime dependency in `lib/README.md` and mention the licence
+  here when it affects distribution.
 
 ## Demo script
 

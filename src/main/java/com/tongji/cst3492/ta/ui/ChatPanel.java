@@ -16,7 +16,9 @@ import com.tongji.cst3492.ta.llm.ChatMessage;
 import com.tongji.cst3492.ta.llm.CitationStatus;
 import com.tongji.cst3492.ta.llm.PromptBuilder;
 import com.tongji.cst3492.ta.llm.StreamSink;
+import com.tongji.cst3492.ta.context.CodeFilePolicy;
 import com.tongji.cst3492.ta.model.CodeContext;
+import com.tongji.cst3492.ta.model.CodeFileSnapshot;
 import com.tongji.cst3492.ta.model.SourceReference;
 import com.tongji.cst3492.ta.service.ChatRequest;
 import com.tongji.cst3492.ta.service.CourseTaService;
@@ -109,6 +111,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final List<MessageLayout> messageBodies = new ArrayList<>();
     private final List<JBTextArea> footnotes = new ArrayList<>();
     private CodeContext pendingCodeContext;
+    private final List<CodeFileSnapshot> pendingFiles = new ArrayList<>();
     private ChatRequest currentRequest;
     private volatile StreamState streamState;
     private AssistantBubble streamCard;
@@ -159,6 +162,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (pending != null) {
             setPendingContext(pending);
         }
+        List<CodeFileSnapshot> queuedFiles = service.consumePendingFiles();
+        if (!queuedFiles.isEmpty()) {
+            addFiles(queuedFiles);
+        }
     }
 
     public void setPendingContext(CodeContext context) {
@@ -166,9 +173,31 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             return;
         }
         pendingCodeContext = context;
-        attachmentLabel.setText(context.summary());
-        attachmentBar.setVisible(true);
+        refreshAttachmentBar();
         updateLanguageUi();
+        input.requestFocusInWindow();
+    }
+
+    /**
+     * Attaches workspace file snapshots. The snapshots were read once, when they
+     * were attached; the panel never re-reads the files, so later edits cannot
+     * silently change the context of an already attached conversation.
+     */
+    public void addFiles(List<CodeFileSnapshot> files) {
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+        for (CodeFileSnapshot file : files) {
+            if (file == null || file.isEmpty() || pendingFiles.size() >= CodeFilePolicy.MAX_FILES) {
+                continue;
+            }
+            boolean known = pendingFiles.stream()
+                    .anyMatch(existing -> existing.path().equals(file.path()));
+            if (!known) {
+                pendingFiles.add(file);
+            }
+        }
+        refreshAttachmentBar();
         input.requestFocusInWindow();
     }
 
@@ -349,7 +378,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (question.isEmpty()) {
             return;
         }
-        CodeContext codeContext = pendingCodeContext;
+        CodeContext codeContext = pendingContextSnapshot();
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
 
         appendMessage("user", question, false, true);
@@ -535,18 +564,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         card.add(sourcesPanel);
         card.add(debugPanel);
         if (!answer.disclosure().isBlank()) {
-            JBTextArea footnote = new JBTextArea(I18n.t(currentLanguage(), "footnotePrefix")
-                    + answer.disclosure());
-            footnote.setEditable(false);
-            footnote.setLineWrap(true);
-            footnote.setWrapStyleWord(true);
-            footnote.setOpaque(false);
-            footnote.setFont(footnote.getFont().deriveFont(Font.ITALIC, 11f));
-            footnote.setForeground(JBColor.GRAY);
-            footnote.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
-            resizeFootnote(footnote, width);
-            footnotes.add(footnote);
-            card.add(footnote);
+            card.add(createFootnote(answer.disclosure(), width));
+        }
+        if (!answer.contextNote().isBlank()) {
+            card.add(createFootnote(answer.contextNote(), width));
         }
         if (!answer.warnings().isEmpty()) {
             JBLabel warning = new JBLabel(I18n.t(currentLanguage(), "warning")
@@ -810,11 +831,63 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         appendMessage("assistant", I18n.t(currentLanguage(), "welcome"), false, true);
     }
 
+    private JBTextArea createFootnote(String text, int width) {
+        JBTextArea footnote = new JBTextArea(I18n.t(currentLanguage(), "footnotePrefix") + text);
+        footnote.setEditable(false);
+        footnote.setLineWrap(true);
+        footnote.setWrapStyleWord(true);
+        footnote.setOpaque(false);
+        footnote.setFont(footnote.getFont().deriveFont(Font.ITALIC, 11f));
+        footnote.setForeground(JBColor.GRAY);
+        footnote.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        resizeFootnote(footnote, width);
+        footnotes.add(footnote);
+        return footnote;
+    }
+
+    private CodeContext pendingContextSnapshot() {
+        List<CodeFileSnapshot> files = List.copyOf(pendingFiles);
+        CodeContext selection = pendingCodeContext;
+        return selection == null ? CodeContext.ofFiles(files) : selection.withFiles(files);
+    }
+
+    private String attachmentSummary() {
+        String language = currentLanguage();
+        StringBuilder label = new StringBuilder();
+        if (pendingCodeContext != null && pendingCodeContext.hasSelection()) {
+            label.append(pendingCodeContext.summary());
+        }
+        if (!pendingFiles.isEmpty()) {
+            if (label.length() > 0) {
+                label.append("  |  ");
+            }
+            label.append(pendingFiles.size()).append(' ')
+                    .append(I18n.t(language, "attachedFiles")).append(": ")
+                    .append(pendingFiles.get(0).fileName());
+            if (pendingFiles.size() > 1) {
+                label.append(", ...");
+            }
+        }
+        return label.toString();
+    }
+
+    private void refreshAttachmentBar() {
+        String summary = attachmentSummary();
+        boolean visible = !summary.isEmpty();
+        attachmentBar.setVisible(visible);
+        if (visible) {
+            attachmentLabel.setText(summary);
+        }
+        attachmentBar.revalidate();
+        attachmentBar.repaint();
+    }
+
     private void viewAttachment() {
-        if (pendingCodeContext == null) {
+        CodeContext context = pendingContextSnapshot();
+        if (context.isEmpty()) {
             return;
         }
-        String text = new PromptBuilder().buildIdeContext(pendingCodeContext)
+        String text = new PromptBuilder().buildIdeContext(context)
                 + "\n\n" + I18n.t(currentLanguage(), "contextSnapshot");
         Messages.showInfoMessage(project, text,
                 I18n.t(currentLanguage(), "attachmentTitle"));
@@ -822,6 +895,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void removeAttachment() {
         pendingCodeContext = null;
+        pendingFiles.clear();
         attachmentBar.setVisible(false);
     }
 
@@ -840,6 +914,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         messageBodies.clear();
         footnotes.clear();
         pendingCodeContext = null;
+        pendingFiles.clear();
         attachmentBar.setVisible(false);
         progressLabel.setText("");
         transcriptPanel.removeAll();
@@ -876,10 +951,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         courseMaterialsItem.setText(I18n.t(language, "courseMaterials"));
         importIndexItem.setText(I18n.t(language, "importIndex"));
         clearConversationItem.setText(I18n.t(language, "clearConversation"));
-        if (pendingCodeContext != null) {
-            attachmentLabel.setText(pendingCodeContext.summary());
-            attachmentBar.setVisible(true);
-        }
+        refreshAttachmentBar();
         if (!busy) {
             progressLabel.setText("");
         }

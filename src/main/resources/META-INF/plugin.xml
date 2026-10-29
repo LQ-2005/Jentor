@@ -7,7 +7,8 @@
     <description>
         A course-specific teaching assistant for CST3492 Java Enterprise Application Development.
         It retrieves relevant lecture slides, answers questions with document and page citations,
-        and can attach the code selected in the editor to the conversation.
+        and can attach the code selected in the editor, or a workspace source file, to the
+        conversation. Files are read once, when attached, and never written.
     </description>
 
     <idea-version since-build="252" until-build="262.*"/>
@@ -35,6 +36,15 @@
                 text="Ask Course TA about Selection"
                 description="Attach the selected code to the CST3492 course TA chat">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+        <action
+                id="Cst3492.AttachFile"
+                class="com.tongji.cst3492.ta.action.AttachFileAction"
+                text="Attach File to Course TA"
+                description="Attach workspace source files to the CST3492 course TA chat">
+            <add-to-group group-id="EditorPopupMenu" anchor="after"
+                          relative-to-action="Cst3492.AskSelection"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>

@@ -1,5 +1,7 @@
 package com.tongji.cst3492.ta.llm;
 
+import com.tongji.cst3492.ta.context.CodeFilePolicy;
+import com.tongji.cst3492.ta.model.CodeFileSnapshot;
 import com.tongji.cst3492.ta.model.RetrievedChunk;
 import com.tongji.cst3492.ta.model.CodeContext;
 import com.tongji.cst3492.ta.model.ContextBlock;
@@ -218,10 +220,53 @@ public final class PromptBuilder {
     }
 
     public String buildIdeContext(CodeContext context) {
-        if (context == null || !context.hasSelection()) {
+        if (context == null || context.isEmpty()) {
             return "IDE CONTEXT:\n(none)\n";
         }
 
+        StringBuilder result = new StringBuilder();
+        if (context.hasSelection()) {
+            result.append(buildSelectionContext(context));
+        }
+        if (context.hasFiles()) {
+            result.append('\n').append(buildWorkspaceFiles(context.files()));
+        }
+        return result.toString();
+    }
+
+    /**
+     * Renders attached workspace files. This is the lowest-priority context: it is
+     * placed after the selection under its own heading and says explicitly that
+     * course material wins, so a stale or unrelated file cannot override a
+     * grounded answer or invent course citations.
+     */
+    public String buildWorkspaceFiles(List<CodeFileSnapshot> files) {
+        StringBuilder result = new StringBuilder(
+                "WORKSPACE FILES (lowest priority: the course material, the selected code "
+                        + "and the USER QUESTION always win; never attach course citations to "
+                        + "these files):\n");
+        int budget = CodeFilePolicy.MAX_TOTAL_CHARS;
+        int index = 0;
+        for (CodeFileSnapshot file : files) {
+            if (file == null || file.isEmpty()) {
+                continue;
+            }
+            String block = "--- " + (index + 1) + ". " + file.describe() + " ---\n"
+                    + file.content() + "\n";
+            if (block.length() > budget) {
+                result.append("--- ").append(file.describe())
+                        .append(" omitted: context budget reached ---\n");
+                break;
+            }
+            budget -= block.length();
+            result.append(block);
+            index++;
+        }
+        result.append("--- end of workspace files ---\n");
+        return result.toString();
+    }
+
+    private String buildSelectionContext(CodeContext context) {
         String method = truncateSignature(context.methodSignature(), 300);
         String declaringClass = truncateSignature(context.classSignature(), 300);
         String range = context.startLine() == context.endLine()

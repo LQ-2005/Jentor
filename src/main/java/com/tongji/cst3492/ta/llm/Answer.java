@@ -12,10 +12,13 @@ public record Answer(
         boolean grounded,
         CitationStatus citationStatus,
         List<String> warnings,
-        String disclosure) {
+        String disclosure,
+        String contextNote) {
     public Answer {
         sources = List.copyOf(sources);
         debugCandidates = List.copyOf(debugCandidates);
         warnings = List.copyOf(warnings);
+        disclosure = disclosure == null ? "" : disclosure;
+        contextNote = contextNote == null ? "" : contextNote;
     }
 }

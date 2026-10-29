@@ -16,6 +16,16 @@ import java.util.regex.Pattern;
 import java.util.function.Consumer;
 
 public final class AnswerService {
+    /**
+     * Shown when workspace files were attached. The plugin never re-reads a file,
+     * so the answer must say the snapshot may have drifted from the current file.
+     */
+    public static final String CONTEXT_NOTE =
+            "Workspace files are a snapshot captured when they were attached; if the files "
+                    + "changed afterwards, this answer may not match the current code.";
+    public static final String CONTEXT_NOTE_ZH =
+            "回答所依据的工作区代码是附加时抓取的快照；若此后修改了文件，回答内容可能与当前代码不一致。";
+
     private final Retriever retriever;
     private final ChatClient chatClient;
     private final PromptBuilder promptBuilder;
@@ -75,6 +85,7 @@ public final class AnswerService {
             Consumer<String> stageListener,
             StreamSink streamSink) throws IOException {
         StreamSink sink = streamSink == null ? StreamSink.NONE : streamSink;
+        String contextNote = contextNote(codeContext, language);
         List<ChatMessage> safeHistory = history == null ? List.of() : history;
         token.throwIfCancelled();
         stage(stageListener, language, "retrieve");
@@ -106,7 +117,8 @@ public final class AnswerService {
                     false,
                     CitationStatus.NOT_APPLICABLE,
                     List.of(),
-                    fallback);
+                    fallback,
+                    contextNote);
         }
 
         stage(stageListener, language, "generate");
@@ -184,7 +196,15 @@ public final class AnswerService {
                 true,
                 status,
                 warnings,
-                disclosure);
+                disclosure,
+                contextNote);
+    }
+
+    private String contextNote(CodeContext codeContext, String language) {
+        if (codeContext == null || !codeContext.hasFiles()) {
+            return "";
+        }
+        return "zh".equals(language) ? CONTEXT_NOTE_ZH : CONTEXT_NOTE;
     }
 
     private String generate(

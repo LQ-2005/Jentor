@@ -152,6 +152,39 @@ Streaming can be switched off in the settings; `CourseTaService` then passes
 `StreamSink.NONE`, `AnswerService` falls back to `ChatClient.complete`, and the
 answer appears in one piece as before.
 
+## Workspace files
+
+`AttachFileAction` reads workspace source files into `CodeFileSnapshot` records,
+and `ChatPanel` keeps them next to the selected code. The rules live in
+`context/CodeFilePolicy`, which has no IntelliJ types so it can be unit tested:
+
+- A whitelist of text extensions (`.java`, `.kt`, `.groovy`, `.xml`,
+  `.properties`, `.gradle`, `.kts`, `.sql`, `.json`). Compiled `.class` files
+  and every binary type are rejected: their bytes are not readable text and the
+  plugin does not decompile them.
+- Names that usually hold credentials (`.env`, `secret*`, `credential*`,
+  `*.pem`, `*.key`, `*.p12`, `*.jks`, `id_rsa*`) are refused.
+- Up to five files, 400 lines or 4000 characters per file, and a 12000-character
+  budget for the whole prompt section. Truncation keeps whole lines and records
+  the range that survived.
+
+`WorkspaceFileReader` is the only part that touches the platform.
+`AttachFileAction` runs it inside a `ReadAction` on a pooled thread, so the EDT
+never touches the disk, and it prefers `FileDocumentManager.getDocument` so
+unsaved editor changes are captured. Files outside the project content, excluded
+directories and library roots are skipped.
+
+A snapshot is taken once, when the file is attached, and never refreshed. That
+keeps the context of a running conversation stable while the user keeps editing;
+the price is that an answer may describe an older version of the file.
+`AnswerService` therefore sets `Answer.contextNote`, rendered as a footnote,
+whenever files were attached.
+
+`PromptBuilder.buildWorkspaceFiles` renders the section last, under a heading
+that states the course material, the selected code and the question win, and that
+course citations must not be attached to these files. Keeping the section out of
+`COURSE MATERIAL` is what preserves the citation contract.
+
 ## Conversation memory
 
 `ChatPanel` keeps the most recent user/assistant turns. Before each request,
