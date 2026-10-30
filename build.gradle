@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.tongji.cst3492'
-version = '0.5.0'
+version = '0.6.0'
 
 // The compiler toolchain must be able to read the IntelliJ jars it compiles
 // against. IntelliJ 2025.2-2026.1 ship Java 21 class files, 2026.2 ships Java 25

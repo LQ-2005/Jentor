@@ -36,7 +36,14 @@ public final class WorkspaceFileReader {
             return null;
         }
         ProjectFileIndex index = ProjectFileIndex.getInstance(project);
-        if (index.isExcluded(file) || index.isInLibrary(file) || !index.isInContent(file)) {
+        if (index.isExcluded(file)) {
+            return null;
+        }
+        // A file inside an imported module is accepted directly. Files under the
+        // project directory are also accepted, because a folder opened without a
+        // successful Gradle/Maven import has no content roots and isInContent()
+        // returns false for everything - that must not silently disable the feature.
+        if (!index.isInContent(file) && !isUnderProjectDir(project, file)) {
             return null;
         }
         String path = projectRelativePath(project, file);
@@ -51,6 +58,11 @@ public final class WorkspaceFileReader {
             return null;
         }
         return CodeFilePolicy.snapshot(path, file.getFileType().getName(), text);
+    }
+
+    private static boolean isUnderProjectDir(Project project, VirtualFile file) {
+        VirtualFile base = ProjectUtil.guessProjectDir(project);
+        return base != null && VfsUtilCore.isAncestor(base, file, false);
     }
 
     private static String projectRelativePath(Project project, VirtualFile file) {

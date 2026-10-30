@@ -123,7 +123,7 @@ required.
 Build output:
 
 ```text
-build\distributions\cst3492-course-ta-0.5.0.zip
+build\distributions\cst3492-course-ta-0.6.0.zip
 ```
 
 Install it into IntelliJ:

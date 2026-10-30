@@ -242,9 +242,10 @@ public final class PromptBuilder {
      */
     public String buildWorkspaceFiles(List<CodeFileSnapshot> files) {
         StringBuilder result = new StringBuilder(
-                "WORKSPACE FILES (lowest priority: the course material, the selected code "
-                        + "and the USER QUESTION always win; never attach course citations to "
-                        + "these files):\n");
+                "WORKSPACE FILES (reference only, lowest priority: the course material and the "
+                        + "USER QUESTION take precedence, and these files must never receive "
+                        + "course citations. Use them whenever the question is about the "
+                        + "project code):\n");
         int budget = CodeFilePolicy.MAX_TOTAL_CHARS;
         int index = 0;
         for (CodeFileSnapshot file : files) {

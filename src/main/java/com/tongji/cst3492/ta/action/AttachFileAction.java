@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
@@ -37,7 +38,7 @@ public final class AttachFileAction extends AnAction {
             return;
         }
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
-            List<CodeFileSnapshot> snapshots = ReadAction.compute(() -> {
+            List<CodeFileSnapshot> snapshots = ReadAction.computeBlocking(() -> {
                 List<CodeFileSnapshot> loaded = new ArrayList<>();
                 for (VirtualFile file : files) {
                     CodeFileSnapshot snapshot = WorkspaceFileReader.read(project, file);
@@ -52,7 +53,17 @@ public final class AttachFileAction extends AnAction {
     }
 
     private static void attach(Project project, List<CodeFileSnapshot> snapshots) {
-        if (snapshots.isEmpty() || project.isDisposed()) {
+        if (project.isDisposed()) {
+            return;
+        }
+        if (snapshots.isEmpty()) {
+            Messages.showMessageDialog(project,
+                    "没有可附加的文件：只支持代码文本文件（.java、.xml、.properties、.gradle 等），"
+                            + "且必须位于当前项目内。\n"
+                            + "No file was attached: only code text files inside the current "
+                            + "project are supported.",
+                    "Attach File to Course TA",
+                    Messages.getWarningIcon());
             return;
         }
         CourseTaService service = project.getService(CourseTaService.class);

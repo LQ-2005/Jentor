@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.tongji.cst3492.ta</id>
     <name>CST3492 Course TA</name>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
     <vendor>Tongji University</vendor>
 
     <description>
