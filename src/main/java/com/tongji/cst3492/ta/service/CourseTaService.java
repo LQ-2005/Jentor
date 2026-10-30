@@ -16,6 +16,7 @@ import com.tongji.cst3492.ta.model.CodeContext;
 import com.tongji.cst3492.ta.model.CodeFileSnapshot;
 import com.tongji.cst3492.ta.model.CourseIndex;
 import com.tongji.cst3492.ta.model.DocumentMeta;
+import com.tongji.cst3492.ta.model.WorkspaceContext;
 import com.tongji.cst3492.ta.settings.TaSettings;
 
 import java.io.IOException;
@@ -90,19 +91,34 @@ public final class CourseTaService {
             CodeContext codeContext,
             List<ChatMessage> history,
             Consumer<String> stageListener) {
-        return ask(question, codeContext, history, stageListener, StreamSink.NONE);
+        return ask(question, codeContext, history, stageListener, StreamSink.NONE, false);
     }
 
-    /**
-     * Asks a question and reports the answer text incrementally through the sink.
-     * The sink is ignored when the user disabled streaming in the settings.
-     */
     public ChatRequest ask(
             String question,
             CodeContext codeContext,
             List<ChatMessage> history,
             Consumer<String> stageListener,
             StreamSink streamSink) {
+        return ask(question, codeContext, history, stageListener, streamSink, false);
+    }
+
+    /**
+     * Asks a question and reports the answer text incrementally through the sink.
+     * The sink is ignored when the user disabled streaming in the settings.
+     *
+     * <p>When {@code includeWorkspace} is set, the workspace outline and a bounded
+     * excerpt of the most relevant files are resolved on this background thread and
+     * merged into the context, so ticking the option always takes effect even on
+     * the first question.</p>
+     */
+    public ChatRequest ask(
+            String question,
+            CodeContext codeContext,
+            List<ChatMessage> history,
+            Consumer<String> stageListener,
+            StreamSink streamSink,
+            boolean includeWorkspace) {
         TaSettings settings = TaSettings.getInstance();
         TaSettings.State state = settings.getState();
         boolean mock = state.useMockModel;
@@ -131,9 +147,12 @@ public final class CourseTaService {
         Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
             try {
                 token.throwIfCancelled();
+                CodeContext effectiveContext = includeWorkspace
+                        ? codeContext.withWorkspace(workspaceContext(question))
+                        : codeContext;
                 Answer answer = answerService.answer(
                         question,
-                        codeContext,
+                        effectiveContext,
                         config,
                         topK,
                         coverageThreshold,
@@ -162,6 +181,16 @@ public final class CourseTaService {
         CodeContext current = pendingContext;
         pendingContext = null;
         return current;
+    }
+
+    /**
+     * Resolves the workspace context for a question. Must run off the EDT: it may
+     * build the index on first use and reads file text for the excerpts.
+     */
+    private WorkspaceContext workspaceContext(String question) {
+        WorkspaceIndexService indexService = project.getService(WorkspaceIndexService.class);
+        return indexService == null ? WorkspaceContext.empty()
+                : indexService.contextForBlocking(question);
     }
 
     /** Queues workspace files for a chat panel that has not been created yet. */

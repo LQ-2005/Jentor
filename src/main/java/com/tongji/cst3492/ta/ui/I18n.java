@@ -55,6 +55,7 @@ public final class I18n {
                     : "No sufficiently relevant course excerpts were retrieved";
             case "footnotePrefix" -> zh ? "注：" : "Note: ";
             case "attachedFiles" -> zh ? "个文件" : "files";
+            case "askInWorkspace" -> zh ? "在本工作区中询问" : "Ask in this workspace";
             case "courseMaterialsReady" -> zh ? "课程资料就绪 · " : "Course materials ready · ";
             case "documents" -> zh ? " 份课件" : " documents";
             case "mockBadge" -> zh ? "离线演示 / Mock" : "Mock mode";

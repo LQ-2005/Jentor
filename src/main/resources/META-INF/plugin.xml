@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.tongji.cst3492.ta</id>
     <name>CST3492 Course TA</name>
-    <version>0.6.0</version>
+    <version>0.7.3</version>
     <vendor>Tongji University</vendor>
 
     <description>
@@ -27,6 +27,8 @@
                 parentId="tools"
                 displayName="CST3492 Course TA"
                 instance="com.tongji.cst3492.ta.settings.TaConfigurable"/>
+        <postStartupActivity
+                implementation="com.tongji.cst3492.ta.service.WorkspaceIndexStartup"/>
     </extensions>
 
     <actions>

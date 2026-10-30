@@ -7,6 +7,7 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.text.JTextComponent;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
 
 public final class TextContextMenu {
     private TextContextMenu() {
@@ -18,11 +19,15 @@ public final class TextContextMenu {
         JMenuItem copy = new JMenuItem("复制 / Copy");
         JMenuItem paste = new JMenuItem("粘贴 / Paste");
         JMenuItem selectAll = new JMenuItem("全选 / Select all");
+        JMenuItem copyAll = new JMenuItem("复制全部 / Copy all");
 
         cut.addActionListener(event -> component.cut());
         copy.addActionListener(event -> component.copy());
         paste.addActionListener(event -> component.paste());
         selectAll.addActionListener(event -> component.selectAll());
+        copyAll.addActionListener(event -> Toolkit.getDefaultToolkit()
+                .getSystemClipboard()
+                .setContents(new StringSelection(component.getText()), null));
 
         menu.addPopupMenuListener(new PopupMenuListener() {
             @Override
@@ -45,6 +50,7 @@ public final class TextContextMenu {
 
         menu.add(cut);
         menu.add(copy);
+        menu.add(copyAll);
         menu.add(paste);
         menu.addSeparator();
         menu.add(selectAll);

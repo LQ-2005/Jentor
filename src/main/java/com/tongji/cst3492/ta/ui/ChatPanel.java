@@ -22,12 +22,14 @@ import com.tongji.cst3492.ta.model.CodeFileSnapshot;
 import com.tongji.cst3492.ta.model.SourceReference;
 import com.tongji.cst3492.ta.service.ChatRequest;
 import com.tongji.cst3492.ta.service.CourseTaService;
+import com.tongji.cst3492.ta.service.WorkspaceIndexService;
 import com.tongji.cst3492.ta.settings.TaConfigurable;
 import com.tongji.cst3492.ta.settings.TaSettings;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JMenuItem;
@@ -92,6 +94,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JBLabel statusLabel = new JBLabel();
     private final JBLabel progressLabel = new JBLabel();
     private final JBLabel mockBadge = new JBLabel();
+    private final JCheckBox workspaceBox = new JCheckBox();
     private final JComboBox<String> languageBox =
             new JComboBox<>(new String[]{"中文", "English"});
     private final JPanel attachmentBar = new JPanel(new BorderLayout(6, 0));
@@ -221,6 +224,21 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         controls.setOpaque(false);
+        workspaceBox.setFont(workspaceBox.getFont().deriveFont(11f));
+        workspaceBox.setOpaque(false);
+        workspaceBox.setSelected(TaSettings.getInstance().getState().workspaceContext);
+        workspaceBox.setToolTipText("Include the workspace code outline in the question");
+        workspaceBox.addActionListener(event -> {
+            TaSettings.State state = TaSettings.getInstance().getState();
+            state.workspaceContext = workspaceBox.isSelected();
+            if (workspaceBox.isSelected()) {
+                WorkspaceIndexService indexService =
+                        project.getService(WorkspaceIndexService.class);
+                if (indexService != null) {
+                    indexService.ensureBuiltAsync();
+                }
+            }
+        });
         languageBox.setSelectedIndex("zh".equals(
                 TaSettings.getInstance().getState().language) ? 0 : 1);
         languageBox.setFont(languageBox.getFont().deriveFont(11f));
@@ -244,6 +262,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         moreMenu.addSeparator();
         moreMenu.add(clearConversationItem);
 
+        controls.add(workspaceBox);
         controls.add(languageBox);
         controls.add(settingsButton);
         controls.add(moreButton);
@@ -379,6 +398,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             return;
         }
         CodeContext codeContext = pendingContextSnapshot();
+        boolean includeWorkspace = TaSettings.getInstance().getState().workspaceContext;
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
 
         appendMessage("user", question, false, true);
@@ -399,7 +419,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         if (generation == requestGeneration && busy) {
                             progressLabel.setText(stage);
                         }
-                    }), createSink(generation));
+                    }), createSink(generation), includeWorkspace);
         } catch (RuntimeException error) {
             streamTimer.stop();
             streamState = null;
@@ -508,7 +528,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         copy.setFont(copy.getFont().deriveFont(11f));
         copy.addActionListener(event -> Toolkit.getDefaultToolkit()
                 .getSystemClipboard()
-                .setContents(new StringSelection(answer.text()), null));
+                .setContents(new StringSelection(MarkdownText.toPlainText(answer.text())), null));
         meta.add(copy);
 
         JPanel sourcesPanel = new JPanel();
@@ -945,6 +965,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         String language = currentLanguage();
         settingsButton.setText(I18n.t(language, "settings"));
         sendButton.setText(I18n.t(language, busy ? "stop" : "send"));
+        workspaceBox.setText(I18n.t(language, "askInWorkspace"));
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));

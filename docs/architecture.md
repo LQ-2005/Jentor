@@ -185,6 +185,38 @@ that states the course material, the selected code and the question win, and tha
 course citations must not be attached to these files. Keeping the section out of
 `COURSE MATERIAL` is what preserves the citation contract.
 
+## Workspace index
+
+At project open `WorkspaceIndexStartup` asks `WorkspaceIndexService` to build an
+index in the background: `WorkspaceIndexBuilder` walks the project content, keeps
+only `java`/`kt`/`groovy` files, and stores an `OutlineExtractor` result per file
+(package, type declaration, member signatures). Method bodies are never kept. The
+index is serialized by `WorkspaceIndexCodec` and cached under the IDE system
+directory by `WorkspaceIndexStore`, keyed by project path, so a restart does not
+re-parse everything.
+
+The index is a structure cache, not a copy of the sources. When the user ticks
+**Ask in this workspace**, `WorkspaceOutlineSelector` picks at most six files whose
+path, type or member names match the question and renders them under
+`PROJECT OUTLINE`, after the selection and the attached files: it locates code, it
+never answers for the slides.
+
+`WorkspaceIndexService` keeps the index current with a background monitor instead
+of asking the user to reload. It listens to `VirtualFileManager.VFS_CHANGES`,
+collects the changed paths, and after an 800 ms debounce re-parses only those
+files on a pooled thread inside a read action; the refreshed index is written back
+to disk and the stale flag is cleared. A two-minute `Alarm` sweep compares the
+number of indexable files with the index size and rebuilds when they diverge, so
+a Git operation or an external tool cannot leave a silently stale index.
+
+For a question, `WorkspaceOutlineSelector.rank` scores files on path, type and
+member names; when nothing matches (common for Chinese questions that contain no
+Java identifier) it falls back to the most recently modified files rather than
+injecting nothing. The service then renders the outline plus a
+`WorkspaceExcerpt` of the top two files. The index is built synchronously on the
+request thread when it is missing, so ticking the option always takes effect,
+even on the first question after startup.
+
 ## Conversation memory
 
 `ChatPanel` keeps the most recent user/assistant turns. Before each request,

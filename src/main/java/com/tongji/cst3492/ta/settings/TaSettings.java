@@ -52,5 +52,6 @@ public final class TaSettings implements PersistentStateComponent<TaSettings.Sta
         public int maxTokens = 1500;
         public boolean useMockModel = false;
         public boolean streamOutput = true;
+        public boolean workspaceContext = false;
     }
 }

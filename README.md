@@ -60,8 +60,10 @@ This is the F0 baseline required for every group.
   button, their own scrollbars and a 360 px height cap. While an answer streams
   the card is painted as plain text; the real editor component is created only
   for the final render.
-- Chat prose and the input use the IDE UI font. Read-only message text and the
-  input provide right-click cut/copy/paste/select-all menus.
+- Chat prose and the input use the IDE UI font. Rendered answers can be selected
+  with the mouse and copied with the platform shortcut; the right-click menu adds
+  cut/copy/paste/select-all plus **Copy all**, and the answer toolbar button
+  copies the message as plain text rather than Markdown source.
 - Message bodies and footnotes reflow when the tool window is resized; the
   transcript has no horizontal scrollbar, and top controls wrap onto a second
   row when space is tight. User messages are right-aligned bubbles capped at 75%
@@ -76,6 +78,20 @@ This is the F0 baseline required for every group.
   `.kts`, `.sql`, `.json`); `.class` and other binary files are refused, and names that
   look like a credential store are skipped. Up to 5 files are attached, each
   capped at 400 lines or 4000 characters.
+- When **Ask in this workspace** is enabled in the tool window header, every
+  question also carries a structural outline of the project: file paths, type
+  declarations and member signatures, plus a bounded excerpt (120 lines or 1800
+  characters) of the two most relevant files, so a question about code can
+  actually be answered. The outline comes from an index built in the background
+  when a project opens and cached on disk under the IDE system directory; it
+  never contains method bodies, is capped at six files and 4000 characters, and
+  is ranked by file path, type and member names, falling back to the most
+  recently modified files when the question mentions no identifier.
+- A background monitor keeps that index current instead of asking the user to
+  reload: VFS changes are debounced, only the changed files are re-parsed and
+  re-saved, and a two-minute sweep catches changes the listener missed (for
+  example a Git branch switch). The answer only says the structure may be
+  outdated while a refresh is still pending.
 - Files are read once, when they are attached, and never re-read. The file
   section is the lowest-priority context after the course material, the selected
   code and the question, so a stale or unrelated file cannot override a grounded
@@ -123,7 +139,7 @@ required.
 Build output:
 
 ```text
-build\distributions\cst3492-course-ta-0.6.0.zip
+build\distributions\cst3492-course-ta-0.7.3.zip
 ```
 
 Install it into IntelliJ:
@@ -149,6 +165,8 @@ In IntelliJ:
 7. To add a whole file, right-click it in the editor or in the Project View and
    choose **Attach File to Course TA**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
+8. Tick **Ask in this workspace** in the tool window header to add the project
+   outline to every question; clear it to send course context only.
 
 To check the UI and citation path without an API key, open the settings and
 enable **Use offline mock model**. The mock model cites the first retrieved

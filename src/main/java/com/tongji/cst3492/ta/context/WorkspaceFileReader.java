@@ -65,7 +65,8 @@ public final class WorkspaceFileReader {
         return base != null && VfsUtilCore.isAncestor(base, file, false);
     }
 
-    private static String projectRelativePath(Project project, VirtualFile file) {
+    /** Package-visible so the index builder can reuse the same path rules. */
+    static String projectRelativePath(Project project, VirtualFile file) {
         VirtualFile base = ProjectUtil.guessProjectDir(project);
         if (base != null) {
             String relative = VfsUtilCore.getRelativePath(file, base, '/');
@@ -76,7 +77,8 @@ public final class WorkspaceFileReader {
         return file.getName();
     }
 
-    private static String textOf(VirtualFile file) {
+    /** Reads the text of a file, preferring the in-memory document. */
+    public static String textOf(VirtualFile file) {
         Document document = FileDocumentManager.getInstance().getDocument(file);
         if (document != null) {
             return document.getText();

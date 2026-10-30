@@ -2,6 +2,7 @@ package com.tongji.cst3492.ta.llm;
 
 import com.tongji.cst3492.ta.context.CodeFilePolicy;
 import com.tongji.cst3492.ta.model.CodeFileSnapshot;
+import com.tongji.cst3492.ta.model.WorkspaceContext;
 import com.tongji.cst3492.ta.model.RetrievedChunk;
 import com.tongji.cst3492.ta.model.CodeContext;
 import com.tongji.cst3492.ta.model.ContextBlock;
@@ -229,8 +230,39 @@ public final class PromptBuilder {
             result.append(buildSelectionContext(context));
         }
         if (context.hasFiles()) {
-            result.append('\n').append(buildWorkspaceFiles(context.files()));
+            appendSection(result, buildWorkspaceFiles(context.files()));
         }
+        if (context.hasWorkspace()) {
+            appendSection(result, buildWorkspaceOutline(context.workspace()));
+        }
+        return result.toString();
+    }
+
+    private static void appendSection(StringBuilder target, String section) {
+        if (section == null || section.isEmpty()) {
+            return;
+        }
+        if (target.length() > 0) {
+            target.append('\n');
+        }
+        target.append(section);
+    }
+
+    /**
+     * Renders the workspace outline. This is the weakest context: it helps locate
+     * code, it never answers for the slides, and it may be marked stale when the
+     * workspace changed after it was built.
+     */
+    public String buildWorkspaceOutline(WorkspaceContext workspace) {
+        if (workspace == null || workspace.isEmpty()) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder(workspace.text().stripTrailing()).append('\n');
+        if (workspace.stale()) {
+            result.append("NOTE: the workspace changed after this outline was built, ")
+                    .append("so it may be outdated.\n");
+        }
+        result.append("--- end of project outline ---\n");
         return result.toString();
     }
 

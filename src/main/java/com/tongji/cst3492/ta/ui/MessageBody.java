@@ -8,7 +8,10 @@ import javax.swing.JComponent;
 import javax.swing.JEditorPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
+import javax.swing.KeyStroke;
 import javax.swing.UIManager;
+import javax.swing.text.DefaultEditorKit;
+import javax.swing.text.JTextComponent;
 import javax.swing.text.Element;
 import javax.swing.text.View;
 import javax.swing.text.ViewFactory;
@@ -18,6 +21,10 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Insets;
+import java.awt.Toolkit;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 public final class MessageBody extends JPanel {
     private final Project project;
@@ -84,6 +91,33 @@ public final class MessageBody extends JPanel {
     }
 
     /** Natural rendered width, capped to the space available for the message. */
+    /** The message as plain text, used by the copy action. */
+    String plainText() {
+        return MarkdownText.toPlainText(sourceText);
+    }
+
+    /**
+     * Makes rendered text selectable and copyable. The component takes focus on a
+     * click and binds the platform copy shortcut itself, because a read-only
+     * JEditorPane does not always receive it from the IDE keymap.
+     */
+    private void makeCopyable(JTextComponent component) {
+        component.setFocusable(true);
+        component.setRequestFocusEnabled(true);
+        component.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                component.requestFocusInWindow();
+            }
+        });
+        int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        component.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_C, mask), DefaultEditorKit.copyAction);
+        component.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_A, mask),
+                        DefaultEditorKit.selectAllAction);
+    }
+
     public int preferredContentWidth(int maxWidth) {
         return Math.min(Math.max(1, maxWidth), Math.max(1, naturalContentWidth));
     }
@@ -117,6 +151,7 @@ public final class MessageBody extends JPanel {
         pane.setFont(uiFont);
         pane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
         TextContextMenu.install(pane);
+        makeCopyable(pane);
         try {
             pane.setText("<html><head><style>body { margin: 0; } "
                     + "p { margin-top: 0; margin-bottom: 6px; } "
@@ -153,6 +188,7 @@ public final class MessageBody extends JPanel {
             fallback.setBorder(null);
             fallback.setFont(uiFont);
             TextContextMenu.install(fallback);
+            makeCopyable(fallback);
             fallback.setSize(new Dimension(contentWidth, Short.MAX_VALUE));
             FontMetrics metrics = fallback.getFontMetrics(fallback.getFont());
             int textWidth = 0;

@@ -25,6 +25,12 @@ public final class AnswerService {
                     + "changed afterwards, this answer may not match the current code.";
     public static final String CONTEXT_NOTE_ZH =
             "回答所依据的工作区代码是附加时抓取的快照；若此后修改了文件，回答内容可能与当前代码不一致。";
+    /** Shown when the injected workspace outline is older than the files on disk. */
+    public static final String WORKSPACE_STALE_NOTE =
+            "The workspace changed after the project outline was built, so this answer may be "
+                    + "based on outdated structure.";
+    public static final String WORKSPACE_STALE_NOTE_ZH =
+            "工作区文件在结构索引建立之后发生了变化，回答可能基于已过期的文件结构。";
 
     private final Retriever retriever;
     private final ChatClient chatClient;
@@ -201,10 +207,21 @@ public final class AnswerService {
     }
 
     private String contextNote(CodeContext codeContext, String language) {
-        if (codeContext == null || !codeContext.hasFiles()) {
+        if (codeContext == null) {
             return "";
         }
-        return "zh".equals(language) ? CONTEXT_NOTE_ZH : CONTEXT_NOTE;
+        boolean zh = "zh".equals(language);
+        StringBuilder note = new StringBuilder();
+        if (codeContext.hasFiles()) {
+            note.append(zh ? CONTEXT_NOTE_ZH : CONTEXT_NOTE);
+        }
+        if (codeContext.workspace().stale()) {
+            if (note.length() > 0) {
+                note.append(' ');
+            }
+            note.append(zh ? WORKSPACE_STALE_NOTE_ZH : WORKSPACE_STALE_NOTE);
+        }
+        return note.toString();
     }
 
     private String generate(
