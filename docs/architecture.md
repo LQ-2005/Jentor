@@ -2,10 +2,9 @@
 
 ## Goal
 
-Provide a course-specific teaching assistant inside IntelliJ IDEA. The assistant
-must retrieve CST3492 lecture material, answer with document and page citations,
-and explicitly fall back to general Java knowledge when the slides do not cover
-the question.
+Jentor is a course-specific teaching assistant inside IntelliJ IDEA. It retrieves
+CST3492 lecture material, answers with document and page citations, and explicitly
+falls back to general Java knowledge when the slides do not cover the question.
 
 ## Pipeline
 
@@ -158,15 +157,15 @@ answer appears in one piece as before.
 and `ChatPanel` keeps them next to the selected code. The rules live in
 `context/CodeFilePolicy`, which has no IntelliJ types so it can be unit tested:
 
-- A whitelist of text extensions (`.java`, `.kt`, `.groovy`, `.xml`,
-  `.properties`, `.gradle`, `.kts`, `.sql`, `.json`). Compiled `.class` files
-  and every binary type are rejected: their bytes are not readable text and the
-  plugin does not decompile them.
+- A source-only whitelist (`.java`, `.kt`, `.groovy`, `.gradle`, `.kts`).
+  Config/data formats such as `.properties`, `.xml` and `.json`, compiled
+  `.class` files and every binary type are rejected.
 - Names that usually hold credentials (`.env`, `secret*`, `credential*`,
-  `*.pem`, `*.key`, `*.p12`, `*.jks`, `id_rsa*`) are refused.
-- Up to five files, 400 lines or 4000 characters per file, and a 12000-character
-  budget for the whole prompt section. Truncation keeps whole lines and records
-  the range that survived.
+  `*.pem`, `*.key`, `*.p12`, `*.jks`, `id_rsa*`) are refused, and admitted text
+  is scanned for obvious private keys or API-token assignments.
+- Up to five files, 400 lines or 4000 characters per file, a 10000-character
+  budget for the file section, and a 16000-character global IDE-context budget.
+  Truncation keeps whole lines and records the range that survived.
 
 `WorkspaceFileReader` is the only part that touches the platform.
 `AttachFileAction` runs it inside a `ReadAction` on a pooled thread, so the EDT
@@ -205,9 +204,10 @@ never answers for the slides.
 of asking the user to reload. It listens to `VirtualFileManager.VFS_CHANGES`,
 collects the changed paths, and after an 800 ms debounce re-parses only those
 files on a pooled thread inside a read action; the refreshed index is written back
-to disk and the stale flag is cleared. A two-minute `Alarm` sweep compares the
-number of indexable files with the index size and rebuilds when they diverge, so
-a Git operation or an external tool cannot leave a silently stale index.
+to disk and the stale flag is cleared. Cached indexes are checked against the
+project path and every indexed file's VFS modification stamp. A two-minute
+`Alarm` sweep repeats that check, so a Git operation or an external edit made
+while the IDE was closed cannot leave a silently stale index.
 
 For a question, `WorkspaceOutlineSelector.rank` scores files on path, type and
 member names; when nothing matches (common for Chinese questions that contain no
@@ -243,7 +243,7 @@ memory.
 
 ## IDE integration
 
-- `CourseTaToolWindowFactory` creates the right-side **Course TA** tool window.
+- `CourseTaToolWindowFactory` creates the right-side **Jentor** tool window.
 - `ChatPanel` owns the transcript, input, send/clear/settings controls, index
   summary, and source list.
 - `MessageBody` renders paragraphs, lists, inline code, and fenced code blocks.

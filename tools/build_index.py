@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a page-aware course index for the CST3492 Course TA plugin.
+"""Build a page-aware course index for the Jentor plugin.
 
 The index keeps the original PDF page number for every chunk. Retrieval uses a
 local hashed term-frequency vector plus BM25 in the Java runtime, so the plugin

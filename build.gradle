@@ -2,8 +2,8 @@ plugins {
     id 'java'
 }
 
-group = 'com.tongji.cst3492'
-version = '0.7.3'
+group = 'com.tongji.cst3492.jentor'
+version = '1.0.0'
 
 // The compiler toolchain must be able to read the IntelliJ jars it compiles
 // against. IntelliJ 2025.2-2026.1 ship Java 21 class files, 2026.2 ships Java 25
@@ -92,19 +92,19 @@ tasks.register('runRetrievalHarness', JavaExec) {
             sourceSets.main.runtimeClasspath,
             'src/main/resources'
     )
-    mainClass = 'com.tongji.cst3492.ta.tools.RetrievalHarness'
+    mainClass = 'com.tongji.cst3492.jentor.tools.RetrievalHarness'
 }
 
 tasks.register('buildPlugin', Zip) {
     dependsOn tasks.named('jar')
-    archiveFileName = "cst3492-course-ta-${version}.zip"
+    archiveFileName = "jentor-${version}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
 
     from(tasks.named('jar')) {
-        into 'cst3492-course-ta/lib'
+        into 'jentor/lib'
     }
     from('lib') {
         include '*.jar'
-        into 'cst3492-course-ta/lib'
+        into 'jentor/lib'
     }
 }

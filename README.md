@@ -1,7 +1,11 @@
-# CST3492 Course TA
+# Jentor
 
-An IntelliJ IDEA plugin that answers questions about the CST3492 Java Enterprise
-Application Development lecture slides and cites the source document and page.
+**Enterprise Java, made clear.**
+
+Jentor is an IntelliJ IDEA teaching assistant for CST3492 Java Enterprise
+Application Development. It answers questions from the lecture material,
+cites the source document and PDF page, and can reason about selected code or
+workspace source files.
 
 This is the F0 baseline required for every group.
 
@@ -72,12 +76,12 @@ This is the F0 baseline required for every group.
 - A right-click editor action that attaches the selected code, up to 20 lines
   before and after it, the line range, and the nearest Java method/class
   signature. The context stays attached until a new selection or Clear.
-- A **Attach File to Course TA** action on the editor and the Project View that
-  adds workspace source files to the next question. Only text source files are
-  accepted (`.java`, `.kt`, `.groovy`, `.xml`, `.properties`, `.gradle`,
-  `.kts`, `.sql`, `.json`); `.class` and other binary files are refused, and names that
-  look like a credential store are skipped. Up to 5 files are attached, each
-  capped at 400 lines or 4000 characters.
+- A **Attach File to Jentor** action on the editor and the Project View that
+  adds workspace source files to the next question. Only source and build-script
+  files are accepted (`.java`, `.kt`, `.groovy`, `.gradle`, `.kts`). Config/data
+  formats such as `.properties`, `.xml` and `.json` are refused, obvious secret
+  assignments and private keys are blocked, and up to 5 files are attached. Each
+  file is capped at 400 lines or 4000 characters.
 - When **Ask in this workspace** is enabled in the tool window header, every
   question also carries a structural outline of the project: file paths, type
   declarations and member signatures, plus a bounded excerpt (120 lines or 1800
@@ -97,6 +101,10 @@ This is the F0 baseline required for every group.
   code and the question, so a stale or unrelated file cannot override a grounded
   answer. Every answer that used attached files ends with a footnote saying the
   code is a snapshot and may differ from the current file.
+- Explicit selected code, attached files and the optional workspace outline share
+  a hard 16,000-character IDE-context budget. Workspace content is marked as
+  untrusted data so instructions embedded in source comments cannot override the
+  system rules.
 - Settings for an OpenAI-compatible chat endpoint. The API key is stored with
   IntelliJ `PasswordSafe`, not in the project.
 - An "Import course index" action for importing a rebuilt `course-index.json`.
@@ -139,7 +147,7 @@ required.
 Build output:
 
 ```text
-build\distributions\cst3492-course-ta-0.7.3.zip
+build\distributions\jentor-1.0.0.zip
 ```
 
 Install it into IntelliJ:
@@ -148,22 +156,22 @@ Install it into IntelliJ:
 2. Gear icon → **Install Plugin from Disk**
 3. Select the ZIP above
 4. Restart IntelliJ
-5. Open `View → Tool Windows → Course TA`
+5. Open `View → Tool Windows → Jentor`
 
 In IntelliJ:
 
-1. Open **Settings | Tools | CST3492 Course TA**.
+1. Open **Settings | Tools | Jentor**.
 2. Set the base URL and chat model.
 3. Paste the API key.
    Streaming is enabled by default; clear **Stream the answer while it is
    generated** if the endpoint does not support server-sent events.
-4. Open the **Course TA** tool window on the right.
+4. Open the **Jentor** tool window on the right.
 5. Ask a course question, for example:
    `What is a checked exception?`
 6. Select code in the editor, right-click, and choose
-   **Ask Course TA about Selection**.
+   **Ask Jentor about Selection**.
 7. To add a whole file, right-click it in the editor or in the Project View and
-   choose **Attach File to Course TA**. The attachment bar shows how many files
+   choose **Attach File to Jentor**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
 8. Tick **Ask in this workspace** in the tool window header to add the project
    outline to every question; clear it to send course context only.
@@ -303,7 +311,7 @@ the code:
 2. Ask `What is a checked exception?` and show the document/page citation.
 3. Ask `What is the weather in Shanghai today?` and show the exact fallback
    sentence.
-4. Select a method, right-click, choose **Ask Course TA about Selection**, and
+4. Select a method, right-click, choose **Ask Jentor about Selection**, and
    ask a question about the selected code.
 5. Open **Settings** and show that the API key is not stored in the project.
 6. Explain the retrieval pipeline and the 10/10 Hit@3 result.

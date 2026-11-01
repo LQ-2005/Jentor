@@ -1,15 +1,15 @@
-package com.tongji.cst3492.ta.tools;
+package com.tongji.cst3492.jentor.tools;
 
-import com.tongji.cst3492.ta.index.Retriever;
-import com.tongji.cst3492.ta.index.Tokens;
-import com.tongji.cst3492.ta.llm.Answer;
-import com.tongji.cst3492.ta.llm.AnswerService;
-import com.tongji.cst3492.ta.llm.LlmConfig;
-import com.tongji.cst3492.ta.llm.MockChatClient;
-import com.tongji.cst3492.ta.llm.CancellationToken;
-import com.tongji.cst3492.ta.model.CodeContext;
-import com.tongji.cst3492.ta.model.CourseIndex;
-import com.tongji.cst3492.ta.model.RetrievedChunk;
+import com.tongji.cst3492.jentor.index.Retriever;
+import com.tongji.cst3492.jentor.index.Tokens;
+import com.tongji.cst3492.jentor.llm.Answer;
+import com.tongji.cst3492.jentor.llm.AnswerService;
+import com.tongji.cst3492.jentor.llm.LlmConfig;
+import com.tongji.cst3492.jentor.llm.MockChatClient;
+import com.tongji.cst3492.jentor.llm.CancellationToken;
+import com.tongji.cst3492.jentor.model.CodeContext;
+import com.tongji.cst3492.jentor.model.CourseIndex;
+import com.tongji.cst3492.jentor.model.RetrievedChunk;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -101,7 +101,7 @@ public final class RetrievalHarness {
                         new CancellationToken(), null);
         System.out.println("MOCK grounded=" + answer.grounded());
         System.out.println("MOCK citationCount="
-                + new com.tongji.cst3492.ta.llm.CitationValidator()
+                + new com.tongji.cst3492.jentor.llm.CitationValidator()
                 .parse(answer.text()).size());
         System.out.println("MOCK warnings=" + answer.warnings());
 
@@ -112,6 +112,6 @@ public final class RetrievalHarness {
                         new CancellationToken(), null);
         System.out.println("GENERAL grounded=" + general.grounded());
         System.out.println("GENERAL fallback=" + general.text().startsWith(
-                com.tongji.cst3492.ta.llm.PromptBuilder.FALLBACK_SENTENCE));
+                com.tongji.cst3492.jentor.llm.PromptBuilder.FALLBACK_SENTENCE));
     }
 }

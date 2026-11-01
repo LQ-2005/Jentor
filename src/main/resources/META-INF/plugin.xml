@@ -1,14 +1,15 @@
 <idea-plugin>
-    <id>com.tongji.cst3492.ta</id>
-    <name>CST3492 Course TA</name>
-    <version>0.7.3</version>
+    <id>com.tongji.cst3492.jentor</id>
+    <name>Jentor</name>
+    <version>1.0.0</version>
     <vendor>Tongji University</vendor>
 
     <description>
-        A course-specific teaching assistant for CST3492 Java Enterprise Application Development.
-        It retrieves relevant lecture slides, answers questions with document and page citations,
-        and can attach the code selected in the editor, or a workspace source file, to the
-        conversation. Files are read once, when attached, and never written.
+        Jentor is a course-specific teaching assistant for CST3492 Java Enterprise
+        Application Development. Enterprise Java, made clear. It retrieves relevant
+        lecture slides, answers questions with document and page citations, and can
+        attach selected editor code or workspace source files to the conversation.
+        Files are read once, when attached, and never written.
     </description>
 
     <idea-version since-build="252" until-build="262.*"/>
@@ -17,35 +18,35 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
-                id="Course TA"
+                id="Jentor"
                 anchor="right"
-                factoryClass="com.tongji.cst3492.ta.ui.CourseTaToolWindowFactory"/>
+                factoryClass="com.tongji.cst3492.jentor.ui.CourseTaToolWindowFactory"/>
         <applicationService
-                serviceImplementation="com.tongji.cst3492.ta.settings.TaSettings"/>
+                serviceImplementation="com.tongji.cst3492.jentor.settings.TaSettings"/>
         <applicationConfigurable
-                id="com.tongji.cst3492.ta.settings"
+                id="com.tongji.cst3492.jentor.settings"
                 parentId="tools"
-                displayName="CST3492 Course TA"
-                instance="com.tongji.cst3492.ta.settings.TaConfigurable"/>
+                displayName="Jentor"
+                instance="com.tongji.cst3492.jentor.settings.TaConfigurable"/>
         <postStartupActivity
-                implementation="com.tongji.cst3492.ta.service.WorkspaceIndexStartup"/>
+                implementation="com.tongji.cst3492.jentor.service.WorkspaceIndexStartup"/>
     </extensions>
 
     <actions>
         <action
-                id="Cst3492.AskSelection"
-                class="com.tongji.cst3492.ta.action.AskSelectionAction"
-                text="Ask Course TA about Selection"
-                description="Attach the selected code to the CST3492 course TA chat">
+                id="Jentor.AskSelection"
+                class="com.tongji.cst3492.jentor.action.AskSelectionAction"
+                text="Ask Jentor about Selection"
+                description="Attach the selected code to the Jentor chat">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
         </action>
         <action
-                id="Cst3492.AttachFile"
-                class="com.tongji.cst3492.ta.action.AttachFileAction"
-                text="Attach File to Course TA"
-                description="Attach workspace source files to the CST3492 course TA chat">
+                id="Jentor.AttachFile"
+                class="com.tongji.cst3492.jentor.action.AttachFileAction"
+                text="Attach File to Jentor"
+                description="Attach workspace source files to the Jentor chat">
             <add-to-group group-id="EditorPopupMenu" anchor="after"
-                          relative-to-action="Cst3492.AskSelection"/>
+                          relative-to-action="Jentor.AskSelection"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
     </actions>

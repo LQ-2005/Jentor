@@ -1,4 +1,4 @@
-# 组员复现说明
+# Jentor 组员复现说明
 
 这个工程是一个 IntelliJ IDEA 插件，不是普通 Java 可执行程序。组员需要在本机用 JDK 和 IntelliJ IDEA 构建出插件 ZIP，然后从磁盘安装。
 
@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/cst3492-course-ta-0.7.3.zip
+build/distributions/jentor-1.0.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,18 +147,18 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/cst3492-course-ta-0.7.3.zip`；
+3. 选择 `build/distributions/jentor-1.0.0.zip`；
 4. 重启 IntelliJ；
-5. 打开 `View → Tool Windows → Course TA`。
+5. 打开 `View → Tool Windows → Jentor`。
 
 ## 6. 配置模型
 
 先测试离线 Mock：
 
-1. `Settings → Tools → CST3492 Course TA`；
+1. `Settings → Tools → Jentor`；
 2. 勾选 `Use offline mock model / 使用离线 Mock 模型`；
 3. `Apply`；
-4. 在 Course TA 中提问，确认工具窗口、引用和兜底注脚正常。
+4. 在 Jentor 中提问，确认工具窗口、引用和兜底注脚正常。
 
 接真实模型时取消 Mock，填写：
 
@@ -214,9 +214,9 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 0.7.3 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.0.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
-- [ ] 右侧出现 Course TA
+- [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
 - [ ] 课程外问题出现灰色“注：本回答基于通用知识……”注脚
 - [ ] 引用来源可展开并查看原文摘录
