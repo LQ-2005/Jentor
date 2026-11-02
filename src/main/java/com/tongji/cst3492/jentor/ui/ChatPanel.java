@@ -121,7 +121,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
     private final JButton removeAttachmentButton = new JButton();
-    private final Timer modeTimer;
+    private final Timer settingsTimer;
     private final Timer reflowTimer;
     private final Timer streamTimer;
 
@@ -134,7 +134,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private ChatRequest currentRequest;
     private volatile StreamState streamState;
     private AssistantBubble streamCard;
+    private MessageView welcomeMessage;
     private Conversation currentConversation;
+    private String displayedLanguage;
+    private boolean syncingLanguageSelection;
     private boolean busy;
     private int requestGeneration;
     private int historyLoadGeneration;
@@ -196,8 +199,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
         appendWelcome();
         updateLanguageUi();
-        modeTimer = new Timer(2000, event -> updateModeSelector());
-        modeTimer.start();
+        settingsTimer = new Timer(2000, event -> syncSettingsUi());
+        settingsTimer.start();
         reflowTimer = new Timer(150, event -> reflowMessages());
         reflowTimer.setRepeats(false);
         streamTimer = new Timer(STREAM_FLUSH_MS, event -> flushStream());
@@ -280,6 +283,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         languageBox.setPreferredSize(new Dimension(88, 26));
         languageBox.setMaximumRowCount(2);
         languageBox.addActionListener(event -> {
+            if (syncingLanguageSelection) {
+                return;
+            }
             TaSettings.State state = TaSettings.getInstance().getState();
             state.language = languageBox.getSelectedIndex() == 0 ? "zh" : "en";
             updateLanguageUi();
@@ -802,11 +808,11 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         new SourcePreviewDialog(project, source, managed).show();
     }
 
-    private void appendMessage(String role, String text, boolean warning, boolean userMessage) {
-        appendMessage(role, text, warning, userMessage, "");
+    private MessageView appendMessage(String role, String text, boolean warning, boolean userMessage) {
+        return appendMessage(role, text, warning, userMessage, "");
     }
 
-    private void appendMessage(
+    private MessageView appendMessage(
             String role,
             String text,
             boolean warning,
@@ -836,6 +842,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         row.add(bubble, user ? BorderLayout.EAST : BorderLayout.WEST);
         addRow(row, userMessage);
+        return new MessageView(roleLabel, body);
     }
 
     private void appendError(String message, String language, String question) {
@@ -951,7 +958,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private void appendWelcome() {
-        appendMessage("assistant", I18n.t(currentLanguage(), "welcome"), false, true);
+        welcomeMessage = appendMessage(
+                "assistant", I18n.t(currentLanguage(), "welcome"), false, true);
     }
 
     private JBTextArea createFootnote(String text, int width) {
@@ -1050,6 +1058,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         input.setText("");
         setProgressText("");
         transcriptPanel.removeAll();
+        welcomeMessage = null;
         historyPanel.setActiveId("");
         appendWelcome();
         updateSendButton();
@@ -1234,6 +1243,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingFiles.clear();
         attachmentBar.setVisible(false);
         transcriptPanel.removeAll();
+        welcomeMessage = null;
         input.setText("");
         for (ConversationMessage message : conversation.messages()) {
             if ("user".equals(message.role())) {
@@ -1343,7 +1353,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void showSettings() {
         ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class);
-        updateModeSelector();
+        syncSettingsUi();
+    }
+
+    private void syncSettingsUi() {
+        if (disposed) {
+            return;
+        }
+        if (!currentLanguage().equals(displayedLanguage)) {
+            updateLanguageUi();
+        } else {
+            updateModeSelector();
+        }
     }
 
     private void updateWorkspaceTooltip() {
@@ -1379,6 +1400,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void updateLanguageUi() {
         String language = currentLanguage();
+        syncingLanguageSelection = true;
+        try {
+            languageBox.setSelectedIndex(I18n.EN.equals(language) ? 1 : 0);
+        } finally {
+            syncingLanguageSelection = false;
+        }
         settingsButton.setText(I18n.t(language, "settings"));
         workspaceBox.setText(I18n.t(language, "askInWorkspace"));
         updateWorkspaceTooltip();
@@ -1395,12 +1422,13 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (!busy) {
             setProgressText("");
         }
-        if (transcriptPanel.getComponentCount() <= 1) {
-            transcriptPanel.removeAll();
-            messageBodies.clear();
-            footnotes.clear();
-            appendWelcome();
+        if (welcomeMessage != null) {
+            welcomeMessage.roleLabel().setText(I18n.t(language, "courseTa"));
+            welcomeMessage.body().setText(I18n.t(language, "welcome"));
         }
+        displayedLanguage = language;
+        transcriptPanel.revalidate();
+        transcriptPanel.repaint();
     }
 
     private void showCourseLibrary() {
@@ -1433,7 +1461,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
-        modeTimer.stop();
+        settingsTimer.stop();
         reflowTimer.stop();
         streamTimer.stop();
         conversationExecutor.shutdownNow();
@@ -1460,6 +1488,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private record MessageLayout(MessageBody body, boolean user) {
+    }
+
+    private record MessageView(JBLabel roleLabel, MessageBody body) {
     }
 
     /** Transcript rows fill the width, but never absorb spare vertical space. */
