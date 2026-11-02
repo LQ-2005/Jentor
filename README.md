@@ -13,17 +13,19 @@ This is the F0 baseline required for every group.
 
 - A page-aware course index built from the nine lecture PDFs:
   **9 documents, 199 pages, 214 chunks**.
-- An independently managed course PDF catalog: add files or folders from any
-  location in the **Course materials** tab. Each PDF records its original path,
-  status, page/chunk counts and errors. PDFBox parses in the background, VFS
-  changes and a 30-second fingerprint sweep trigger updates, and the previous
-  valid index remains active until the new aggregate is complete.
+- An independently managed course-material catalog: add files or folders from
+  any location in the **Course materials** tab. Supported inputs include PDF,
+  DOCX/PPTX/XLSX, legacy DOC/PPT/XLS, TXT/Markdown/HTML/CSV, and PNG/JPG/BMP/TIFF
+  images. Office tables keep row/cell structure; PDF/Office images and low-text
+  PDF pages use bundled offline English + Simplified Chinese OCR. Each item
+  records its original path, parser, location/chunk counts, tables, images, OCR
+  status and errors.
 - BM25-first hybrid retrieval with a hashed TF-IDF vector as a tie-breaker.
 - Exact-title and phrase boosts so "what is X?" questions reach the slide that
   defines X instead of a longer overview slide.
 - A grounded prompt that requires citations in the form
-  `[document, p.12]` or `[document, pp.12-13]`. The index uses PDF page numbers;
-  `Slide` is not mixed into citations.
+  `[document, <locator>]`, such as `p.12`, `pp.12-13`, `slide 4`,
+  `section 3`, `sheet 2`, or `image 1`.
 - Citation validation against the exact context blocks sent to the model after
   context trimming, with one automatic retry. Missing citations are also checked.
 - Citation states are explicit: validated, failed, or not applicable to a
@@ -152,7 +154,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.2.0.zip
+build\distributions\jentor-1.3.0.zip
 ```
 
 Install it into IntelliJ:
@@ -166,7 +168,7 @@ Install it into IntelliJ:
 In IntelliJ:
 
 1. Open **Settings | Tools | Jentor**.
-2. Open **Jentor → Course materials** and add course PDFs from any folders.
+2. Open **Jentor → Course materials** and add supported course files from any folders.
 3. Set the base URL and chat model.
 4. Paste the API key.
    Streaming is enabled by default; clear **Stream the answer while it is
@@ -206,18 +208,22 @@ The bundled index does not require an embedding API.
 The normal workflow is:
 
 1. Open the **Course materials** tab in the Jentor tool window.
-2. Use **Add PDFs**, drag PDFs into the table, or use **Add folder** for bulk
+2. Use **Add files**, drag files into the table, or use **Add folder** for bulk
    import. Files may come from unrelated directories.
-3. Each PDF is parsed independently and appears as queued, indexing, ready,
+3. Each file is parsed independently and appears as queued, indexing, ready,
    missing or failed.
-4. Replacing a source PDF updates only that catalog entry. Removing an entry from
-   Jentor never deletes the source PDF.
+4. Replacing a source file updates only that catalog entry. Removing an entry from
+   Jentor never deletes the source file.
 5. A source path that moves becomes missing and can be rebound with **Locate**.
 6. Citation details show the original path and provide open-folder/copy-path
    actions.
 
 The catalog and aggregate index are cached under the IDE system directory.
-Image-only PDFs require OCR before Jentor can read them.
+`eng`, `chi_sim` and `osd` OCR data are bundled for offline image/scanned-page
+recognition. The current Tesseract native binary is Windows-only.
+
+PDF tables use a layout heuristic; Office tables use the real document table
+model. Complex PDF tables with merged cells can still lose cell boundaries.
 
 The bundled Python-generated index remains a fallback when the managed catalog
 has no usable documents. The optional Python workflow is:
@@ -312,7 +318,10 @@ Key packages:
 - Plugin installation and live model calls must be smoke-tested on a machine
   with IntelliJ IDEA installed and API access configured.
 - The bundled index was generated from the course PDF slides.
-- The managed library does not perform OCR for scanned/image-only PDFs.
+- Offline OCR currently uses Windows Tesseract native libraries.
+- OCR recognizes useful text but does not understand charts or image semantics.
+- PDF table row/column recovery is heuristic; Office table structure is exact
+  as exposed by Apache POI.
 - If a source PDF is moved outside Jentor, it is marked missing until relocated.
 - The local vector is lexical. A real embedding endpoint can be added later
   without changing the citation contract.

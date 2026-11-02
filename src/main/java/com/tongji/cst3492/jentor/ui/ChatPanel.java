@@ -725,7 +725,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 .sourceForDocumentId(source.docId());
         String location = managed == null ? "" : managed.path();
         String text = "File: " + source.fileName() + "\n"
-                + "PDF page: " + source.locator() + "\n"
+                + "Location: " + source.locator() + "\n"
                 + (location.isBlank() ? "" : "Original location: " + location + "\n")
                 + "\n"
                 + "Excerpt:\n" + source.excerpt();
@@ -736,7 +736,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         int choice = Messages.showDialog(project, text,
                 I18n.t(currentLanguage(), "sourcesCount"),
-                new String[]{"Open PDF", "Show folder", "Copy path", "Close"},
+                new String[]{"Open file", "Show folder", "Copy path", "Close"},
                 0, Messages.getInformationIcon());
         Path path = Path.of(location);
         if (choice == 0) {

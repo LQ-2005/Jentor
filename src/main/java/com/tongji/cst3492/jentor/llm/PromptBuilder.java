@@ -29,7 +29,8 @@ public final class PromptBuilder {
     private static final String GROUNDED_RULES = """
             Answer using ONLY the course material excerpts below when they are relevant.
             For every claim taken from an excerpt, cite it exactly as
-            [<document name>, p.<page>] or [<document name>, pp.<start>-<end>].
+            [<document name>, <locator>], copying the locator printed for that excerpt.
+            Supported forms include p./pp., slide(s), section(s), sheet(s), and image(s).
             Never invent a document name, page number, or quotation.
             Structure the answer with a "Course basis" (课程依据) section and, only if
             needed, a separate "General supplement" (通用补充) section. Do not attach
@@ -98,7 +99,7 @@ public final class PromptBuilder {
                 Your previous answer contained citations that could not be verified against the
                 provided excerpts: %s
                 Rewrite the answer. Use only the excerpts below. Cite every course-derived claim
-                exactly as [<document name>, p.<page>] or [<document name>, pp.<start>-<end>].
+                exactly as [<document name>, <locator>], using the locator printed for that excerpt.
                 Do not cite a page that is not listed below. If the excerpts are insufficient,
                 use the required general-knowledge fallback sentence and do not invent citations.
                 """.formatted(String.join("; ", invalidCitations));

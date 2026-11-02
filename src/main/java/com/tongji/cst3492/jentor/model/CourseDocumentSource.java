@@ -5,11 +5,16 @@ public record CourseDocumentSource(
         String id,
         String path,
         String displayName,
+        String fileType,
         String contentHash,
         long size,
         long modifiedAt,
         int pageCount,
         int chunkCount,
+        int tableCount,
+        int imageCount,
+        boolean ocrUsed,
+        String parser,
         String status,
         String error,
         long indexedAt) {
@@ -24,9 +29,27 @@ public record CourseDocumentSource(
         id = id == null ? "" : id;
         path = path == null ? "" : path;
         displayName = displayName == null ? "" : displayName;
+        fileType = fileType == null ? "" : fileType;
         contentHash = contentHash == null ? "" : contentHash;
+        parser = parser == null ? "" : parser;
         status = status == null ? ERROR : status;
         error = error == null ? "" : error;
+    }
+
+    public CourseDocumentSource(
+            String id,
+            String path,
+            String displayName,
+            String contentHash,
+            long size,
+            long modifiedAt,
+            int pageCount,
+            int chunkCount,
+            String status,
+            String error,
+            long indexedAt) {
+        this(id, path, displayName, "", contentHash, size, modifiedAt, pageCount,
+                chunkCount, 0, 0, false, "", status, error, indexedAt);
     }
 
     public boolean hasIndex() {
@@ -34,8 +57,9 @@ public record CourseDocumentSource(
     }
 
     public CourseDocumentSource withStatus(String nextStatus, String nextError) {
-        return new CourseDocumentSource(id, path, displayName, contentHash, size, modifiedAt,
-                pageCount, chunkCount, nextStatus, nextError, indexedAt);
+        return new CourseDocumentSource(id, path, displayName, fileType, contentHash,
+                size, modifiedAt, pageCount, chunkCount, tableCount, imageCount,
+                ocrUsed, parser, nextStatus, nextError, indexedAt);
     }
 
     public CourseDocumentSource withParsed(
@@ -44,8 +68,14 @@ public record CourseDocumentSource(
             long nextModifiedAt,
             int nextPageCount,
             int nextChunkCount,
+            int nextTableCount,
+            int nextImageCount,
+            boolean nextOcrUsed,
+            String nextParser,
             long nextIndexedAt) {
-        return new CourseDocumentSource(id, path, displayName, nextHash, nextSize,
-                nextModifiedAt, nextPageCount, nextChunkCount, READY, "", nextIndexedAt);
+        return new CourseDocumentSource(id, path, displayName, fileType, nextHash,
+                nextSize, nextModifiedAt, nextPageCount, nextChunkCount,
+                nextTableCount, nextImageCount, nextOcrUsed, nextParser,
+                READY, "", nextIndexedAt);
     }
 }

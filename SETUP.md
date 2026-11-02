@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.2.0.zip
+build/distributions/jentor-1.3.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.2.0.zip`；
+3. 选择 `build/distributions/jentor-1.3.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -157,11 +157,13 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. 打开 `View → Tool Windows → Jentor`；
 2. 切换到“课程资料 / Course materials”页；
-3. 点击“添加 PDF”，选择任意位置的一份或多份 PDF；
-4. 也可以拖放 PDF，或使用“添加文件夹”批量导入；
+3. 点击“添加资料”，选择任意位置的一份或多份课程文件；
+4. 也可以拖放文件，或使用“添加文件夹”批量导入；
 5. 每份资料会显示排队、索引中、已就绪、文件缺失或失败状态。
 
 课程资料不要求位于同一个文件夹，也不会被复制、移动或删除。Jentor 只记录原始路径并在后台解析。
+
+支持 PDF、DOCX/PPTX/XLSX、旧版 DOC/PPT/XLS、TXT/Markdown/HTML/CSV，以及 PNG/JPG/BMP/TIFF 图片。Office 表格保留真实行列；PDF 和 Office 内图片会使用离线中英文 OCR。
 
 常用操作：
 
@@ -173,7 +175,8 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 课程资料库有以下限制：
 
-- 不执行 OCR，纯图片 PDF 无法提取文字；
+- OCR 原生库目前仅支持 Windows；
+- PDF 表格结构使用布局启发式识别，复杂合并单元格可能不完全准确；
 - 索引缓存位于 IntelliJ 系统目录；
 - 不需要 Python 或 `pypdf`。
 
@@ -238,7 +241,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.2.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.3.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -253,3 +256,6 @@ python tools/build_index.py `
 - [ ] 无效或损坏 PDF 不会清空上一份可用索引
 - [ ] 移除资料不会删除原始 PDF
 - [ ] 移动原 PDF 后显示“文件缺失”，并能通过“定位”恢复
+- [ ] DOCX/PPTX/XLSX 的表格行列能够进入索引
+- [ ] 添加 PNG/JPG 后能够通过离线 OCR 识别中英文
+- [ ] 扫描版 PDF 或 PDF 内图片能够生成 OCR 内容

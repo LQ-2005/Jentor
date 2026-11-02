@@ -117,7 +117,11 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     private void chooseFiles() {
         JFileChooser chooser = new JFileChooser();
         chooser.setMultiSelectionEnabled(true);
-        chooser.setFileFilter(new FileNameExtensionFilter("PDF course material", "pdf"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "Course materials",
+                "pdf", "docx", "pptx", "xlsx", "doc", "ppt", "xls",
+                "txt", "md", "markdown", "html", "htm", "csv",
+                "png", "jpg", "jpeg", "bmp", "tif", "tiff"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             service.addFiles(List.of(chooser.getSelectedFiles()).stream()
                     .map(File::toPath).toList());
@@ -161,7 +165,11 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
             return;
         }
         JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("PDF course material", "pdf"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                "Course materials",
+                "pdf", "docx", "pptx", "xlsx", "doc", "ppt", "xls",
+                "txt", "md", "markdown", "html", "htm", "csv",
+                "png", "jpg", "jpeg", "bmp", "tif", "tiff"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             service.relocate(selected.id(), chooser.getSelectedFile().toPath());
         }
@@ -241,9 +249,15 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         details.setText(
                 source.displayName() + "\n"
                         + text("原始位置：", "Original location: ") + source.path() + "\n"
+                        + text("文件类型：", "File type: ") + source.fileType() + "\n"
                         + text("状态：", "Status: ") + statusText(source.status()) + "\n"
-                        + text("页数：", "Pages: ") + source.pageCount()
+                        + text("定位单元：", "Locations: ") + source.pageCount()
                         + "    Chunks: " + source.chunkCount() + "\n"
+                        + text("表格：", "Tables: ") + source.tableCount()
+                        + "    " + text("图片：", "Images: ") + source.imageCount()
+                        + "    OCR: " + (source.ocrUsed()
+                        ? text("已使用", "used") : text("未使用", "not used")) + "\n"
+                        + text("解析器：", "Parser: ") + source.parser() + "\n"
                         + (source.error().isBlank() ? ""
                         : text("错误：", "Error: ") + source.error() + "\n")
                         + "\n" + text(
@@ -277,12 +291,12 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     }
 
     private void updateLabels() {
-        addFiles.setText(text("添加 PDF", "Add PDFs"));
+        addFiles.setText(text("添加资料", "Add files"));
         addFolder.setText(text("添加文件夹", "Add folder"));
         refresh.setText(text("刷新", "Refresh"));
         rebuild.setText(text("重新索引", "Rebuild"));
         remove.setText(text("移除资料", "Remove"));
-        openPdf.setText(text("打开 PDF", "Open PDF"));
+        openPdf.setText(text("打开文件", "Open file"));
         openFolder.setText(text("打开所在文件夹", "Show folder"));
         locate.setText(text("定位缺失文件", "Locate"));
         copyPath.setText(text("复制路径", "Copy path"));
@@ -332,7 +346,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
 
         @Override
         public int getColumnCount() {
-            return 6;
+            return 8;
         }
 
         @Override
@@ -340,9 +354,11 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
             return switch (column) {
                 case 0 -> text("状态", "Status");
                 case 1 -> text("课程资料", "Material");
-                case 2 -> text("原始位置", "Original location");
-                case 3 -> text("页数", "Pages");
-                case 4 -> "Chunks";
+                case 2 -> text("类型", "Type");
+                case 3 -> text("原始位置", "Original location");
+                case 4 -> text("定位单元", "Locations");
+                case 5 -> "Chunks";
+                case 6 -> text("表格 / 图片", "Tables / Images");
                 default -> text("错误", "Error");
             };
         }
@@ -353,9 +369,11 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
             return switch (columnIndex) {
                 case 0 -> statusText(source.status());
                 case 1 -> source.displayName();
-                case 2 -> source.path();
-                case 3 -> source.pageCount() == 0 ? "" : source.pageCount();
-                case 4 -> source.chunkCount() == 0 ? "" : source.chunkCount();
+                case 2 -> source.fileType();
+                case 3 -> source.path();
+                case 4 -> source.pageCount() == 0 ? "" : source.pageCount();
+                case 5 -> source.chunkCount() == 0 ? "" : source.chunkCount();
+                case 6 -> source.tableCount() + " / " + source.imageCount();
                 default -> source.error();
             };
         }

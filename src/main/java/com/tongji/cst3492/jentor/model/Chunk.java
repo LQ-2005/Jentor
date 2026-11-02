@@ -83,13 +83,33 @@ public final class Chunk {
     }
 
     public String locator() {
-        if ("SLIDE".equalsIgnoreCase(locatorType)) {
-            return pageStart == pageEnd
-                    ? "Slide " + pageStart
-                    : "Slides " + pageStart + "-" + pageEnd;
+        String singular;
+        String plural;
+        switch (locatorType == null ? "PAGE" : locatorType.toUpperCase()) {
+            case "SLIDE":
+                singular = "slide ";
+                plural = "slides ";
+                break;
+            case "SECTION":
+                singular = "section ";
+                plural = "sections ";
+                break;
+            case "SHEET":
+                singular = "sheet ";
+                plural = "sheets ";
+                break;
+            case "IMAGE":
+                singular = "image ";
+                plural = "images ";
+                break;
+            case "PAGE":
+            default:
+                singular = "p.";
+                plural = "pp.";
+                break;
         }
         return pageStart == pageEnd
-                ? "p." + pageStart
-                : "pp." + pageStart + "-" + pageEnd;
+                ? singular + pageStart
+                : plural + pageStart + "-" + pageEnd;
     }
 }

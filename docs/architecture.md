@@ -34,13 +34,16 @@ There are two compatible sources for the page-aware index:
 2. The optional Python script `tools/build_index.py`, retained for reproducible
    offline index generation and bundled fallback material.
 
-`CourseLibraryService` owns a catalog of independent PDF entries. Each entry may
+`CourseLibraryService` owns a catalog of independent course-file entries. Each entry may
 live in a different folder and stores its original path, content hash, size,
-modification time, page/chunk counts and indexing status. Exact source paths are
+modification time, page/chunk/table/image counts, OCR/parser metadata and indexing status. Exact source paths are
 watched through VFS, and a 30-second size/mtime sweep covers missed events.
-`PdfCourseIndexBuilder` parses one PDF at a time, extracts sorted/layout and
-default PDFBox text, chooses the more readable result, cleans footer page
-numbers, and chunks each page independently. `CourseLibraryStore` persists
+`CourseDocumentParser` routes PDF, DOCX/PPTX/XLSX, legacy Office, plain text,
+Markdown, HTML, CSV and images to dedicated parsers. PDFBox extracts sorted/layout
+and default PDF text, OCRs embedded images and low-text pages, and marks
+table-like multiline layouts. Apache POI preserves Office table row/cell models;
+JSoup handles HTML structure; Tess4J performs offline `chi_sim+eng` OCR.
+`CourseLibraryStore` persists
 `catalog.json` and the aggregate `course-index.json` atomically.
 
 The previous index remains active until parsing, vector generation and JSON
@@ -58,6 +61,7 @@ unchanged documents and regenerates the global IDF/vector aggregate.
   chunk; longer pages are split at line boundaries with a 120-character overlap.
 - Every chunk stores `docId`, `docTitle`, `fileName`, `pageStart`, `pageEnd`,
   `locatorType`, `chunkIndex`, `title`, `text`, and a 512-dimensional vector.
+  Locator types include `PAGE`, `SLIDE`, `SECTION`, `SHEET`, and `IMAGE`.
 
 The bundled Python index currently contains 9 documents, 199 pages, and 214
 chunks. PDFBox extraction is not byte-for-byte identical to pypdf; the same
@@ -104,7 +108,8 @@ demo risk low.
 The system prompt requires:
 
 - answers grounded in the supplied excerpts when they are relevant;
-- citations in the form `[document, p.12]` or `[document, pp.12-13]`;
+- citations in the form `[document, <locator>]`, including PDF pages, slides,
+  sections, sheets and images;
 - no invented document names or pages;
 - the exact sentence
   `Response is based on general knowledge; no specific course material is referenced.`
@@ -284,11 +289,12 @@ memory.
   until the user selects another snippet or clicks Clear.
 - `TaSettings` stores the endpoint and model in XML and the API key in
   `PasswordSafe`.
-- `CourseLibraryService`, `CourseDocumentSource`, `PdfCourseIndexBuilder`,
-  `CourseIndexJsonCodec` and `CourseLibraryStore` implement the independent PDF
+- `CourseLibraryService`, `CourseDocumentSource`, `CourseDocumentParser`,
+  `PdfCourseIndexBuilder`, `OcrEngine`, `CourseIndexJsonCodec` and
+  `CourseLibraryStore` implement the independent multi-format
   catalog, validation and persistence.
 - `CourseLibraryPanel` is the management tab for adding, refreshing, rebuilding,
-  removing, locating and opening course PDFs.
+  removing, locating and opening course files.
 - `CourseTaService` prefers the active managed index, then a manual import, then
   `/index/course-index.json`, and runs requests on the IntelliJ application
   executor.
@@ -298,7 +304,8 @@ memory.
 - A managed index is loaded once per application and shared by projects; its
   retriever is replaced lazily when the library revision changes.
 - Retrieval is O(chunks * dimensions) with no network call.
-- The bundle is about 667 KiB; PDFBox artifacts add roughly 3.8 MiB to the ZIP.
+- The bundled fallback index is about 667 KiB. POI, PDFBox and Windows
+  Tess4J/Tesseract increase the plugin ZIP substantially.
 - The global IDE context is capped at 16000 characters and course excerpts use
   the configurable context limit.
 - The API key is never written to project files or logs.
@@ -309,9 +316,13 @@ memory.
   embedding endpoint without changing the chunk or citation contract.
 - Citation validation checks document and page validity, not semantic
   attribution.
-- The catalog may reference PDFs from unrelated folders; importing a folder is
+- The catalog may reference supported files from unrelated folders; importing a folder is
   only a bulk convenience.
-- Scanned/image-only PDFs are not OCRed.
+- OCR uses bundled Windows Tess4J/Tesseract native libraries and English/Chinese
+  training data. macOS/Linux OCR requires a future native distribution.
+- OCR extracts text, not visual semantics, charts, diagrams or handwritten intent.
+- Office tables use native row/cell structures; PDF table rows are heuristic and
+  complex merged cells may not be preserved.
 - Encrypted or unsupported PDFs produce an error on their own catalog row while
   other valid materials remain active.
 - Moving a source PDF marks it missing; the old chunks remain until the user

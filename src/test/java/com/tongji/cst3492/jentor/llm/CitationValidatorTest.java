@@ -100,6 +100,27 @@ class CitationValidatorTest {
                 "## Course basis\nAn interface claim. " + citation, blocks));
     }
 
+    @Test
+    void supportsNonPdfLocatorTypes() {
+        String slideCitation = "[Lecture.pptx, slide 4]";
+        String sectionCitation = "[Notes.docx, section 3]";
+        Chunk slide = new Chunk("slide-4", "slides", "Lecture", "Lecture.pptx",
+                "SLIDE", 4, 4, 0, "Security", "Filters protect requests.", new float[512]);
+        Chunk section = new Chunk("section-3", "notes", "Notes", "Notes.docx",
+                "SECTION", 3, 3, 0, "Exceptions", "Checked exceptions.", new float[512]);
+
+        List<ContextBlock> mixed = List.of(
+                new ContextBlock(slide, slide.getText(), false),
+                new ContextBlock(section, section.getText(), false));
+
+        assertTrue(validator.invalidCitations(
+                "## Course basis\nSlides. " + slideCitation + "\nSections. " + sectionCitation,
+                mixed).isEmpty());
+        assertEquals(2, validator.citedSources(
+                "## Course basis\nSlides. " + slideCitation + "\nSections. " + sectionCitation,
+                mixed).size());
+    }
+
     private static ContextBlock block(int page) {
         Chunk chunk = new Chunk("interface-" + page, "oop", "Lec-2-OOP-with-Java",
                 "Lec-2-OOP-with-Java.pdf", "PAGE", page, page, 0,

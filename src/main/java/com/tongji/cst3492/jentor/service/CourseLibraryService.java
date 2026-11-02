@@ -2,6 +2,7 @@ package com.tongji.cst3492.jentor.service;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -9,6 +10,8 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.util.Alarm;
 import com.tongji.cst3492.jentor.context.CourseLibraryStore;
+import com.tongji.cst3492.jentor.context.CourseDocumentParser;
+import com.tongji.cst3492.jentor.context.OcrEngine;
 import com.tongji.cst3492.jentor.context.PdfCourseIndexBuilder;
 import com.tongji.cst3492.jentor.model.CourseDocumentSource;
 import com.tongji.cst3492.jentor.model.CourseIndex;
@@ -64,6 +67,7 @@ public final class CourseLibraryService implements Disposable {
     private volatile boolean started;
 
     public CourseLibraryService() {
+        OcrEngine.configureStorageRoot(PathManager.getSystemDir().resolve("jentor-ocr"));
         ApplicationManager.getApplication().getMessageBus().connect(this)
                 .subscribe(VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
                     @Override
@@ -114,7 +118,7 @@ public final class CourseLibraryService implements Disposable {
             if (legacyFolder != null && !legacyFolder.isBlank() && Files.isDirectory(
                     Path.of(legacyFolder))) {
                 try {
-                    migrated.addAll(PdfCourseIndexBuilder.listPdfFiles(Path.of(legacyFolder)));
+                    migrated.addAll(CourseDocumentParser.listSupportedFiles(Path.of(legacyFolder)));
                 } catch (IOException error) {
                     lastError = error.getMessage();
                 }
@@ -135,7 +139,7 @@ public final class CourseLibraryService implements Disposable {
         }
         List<Path> requested = files.stream()
                 .filter(path -> path != null && Files.isRegularFile(path)
-                        && path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".pdf"))
+                        && CourseDocumentParser.isSupported(path))
                 .map(path -> path.toAbsolutePath().normalize())
                 .distinct()
                 .toList();
@@ -152,7 +156,7 @@ public final class CourseLibraryService implements Disposable {
             return;
         }
         try {
-            addFiles(PdfCourseIndexBuilder.listPdfFiles(folder));
+            addFiles(CourseDocumentParser.listSupportedFiles(folder));
         } catch (IOException error) {
             lastMessage = "Cannot read course folder: " + error.getMessage();
         }
@@ -197,8 +201,10 @@ public final class CourseLibraryService implements Disposable {
                 CourseDocumentSource source = sources.get(index);
                 sources.set(index, new CourseDocumentSource(
                         source.id(), normalized.toString(), normalized.getFileName().toString(),
+                        CourseDocumentParser.fileType(normalized),
                         "", 0L, 0L, source.pageCount(), source.chunkCount(),
-                        CourseDocumentSource.QUEUED, "", source.indexedAt()));
+                        source.tableCount(), source.imageCount(), source.ocrUsed(),
+                        source.parser(), CourseDocumentSource.QUEUED, "", source.indexedAt()));
             }
             persistCatalog();
             reconcileSource(sourceId);
@@ -255,10 +261,13 @@ public final class CourseLibraryService implements Disposable {
                         if (index >= 0) {
                             sources.set(index, new CourseDocumentSource(
                                     samePath.id(), path.toString(),
-                                    path.getFileName().toString(), hash,
+                                    path.getFileName().toString(),
+                                    CourseDocumentParser.fileType(path), hash,
                                     Files.size(path),
                                     Files.getLastModifiedTime(path).toMillis(),
                                     samePath.pageCount(), samePath.chunkCount(),
+                                    samePath.tableCount(), samePath.imageCount(),
+                                    samePath.ocrUsed(), samePath.parser(),
                                     CourseDocumentSource.QUEUED, "", samePath.indexedAt()));
                         }
                     }
@@ -279,10 +288,12 @@ public final class CourseLibraryService implements Disposable {
                         id,
                         path.toString(),
                         path.getFileName().toString(),
+                        CourseDocumentParser.fileType(path),
                         hash,
                         Files.size(path),
                         Files.getLastModifiedTime(path).toMillis(),
-                        0, 0, CourseDocumentSource.QUEUED, "", 0L);
+                        0, 0, 0, 0, false, "",
+                        CourseDocumentSource.QUEUED, "", 0L);
                 synchronized (lock) {
                     sources.add(source);
                 }
@@ -339,7 +350,7 @@ public final class CourseLibraryService implements Disposable {
             }
             updateSource(source.withStatus(CourseDocumentSource.INDEXING, ""));
             PdfCourseIndexBuilder.ParsedDocument parsed =
-                    PdfCourseIndexBuilder.parse(path, source.id());
+                    CourseDocumentParser.parse(path, source.id());
             String hash = sha256(path);
             CourseDocumentSource ready = source.withParsed(
                     hash,
@@ -347,6 +358,10 @@ public final class CourseLibraryService implements Disposable {
                     modified,
                     parsed.document().getPageCount(),
                     parsed.chunks().size(),
+                    parsed.tableCount(),
+                    parsed.imageCount(),
+                    parsed.ocrUsed(),
+                    parsed.parser(),
                     System.currentTimeMillis());
             synchronized (lock) {
                 int index = sourceIndex(sourceId);
@@ -481,7 +496,11 @@ public final class CourseLibraryService implements Disposable {
             if (event.getPath() == null) {
                 continue;
             }
-            String normalized = Path.of(event.getPath()).toAbsolutePath().normalize().toString();
+            Path eventPath = Path.of(event.getPath());
+            if (!CourseDocumentParser.hasSupportedExtension(eventPath)) {
+                continue;
+            }
+            String normalized = eventPath.toAbsolutePath().normalize().toString();
             if (paths.containsKey(normalized)) {
                 changeAlarm.cancelAllRequests();
                 changeAlarm.addRequest(this::refreshAll, CHANGE_DEBOUNCE_MS);

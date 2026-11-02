@@ -23,12 +23,18 @@ import java.util.regex.Pattern;
 public final class CitationValidator {
     private static final Parser MARKDOWN = Parser.builder().build();
     private static final Pattern CITATION_PATTERN = Pattern.compile(
-            "\\[([^,\\]]+),\\s*(?:p\\.|pp\\.)\\s*(\\d+)(?:\\s*-\\s*(\\d+))?\\]",
+            "\\[([^,\\]]+),\\s*(p\\.|pp\\.|slide|slides|section|sections|"
+                    + "sheet|sheets|image|images)\\s*(\\d+)(?:\\s*-\\s*(\\d+))?\\]",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern GENERAL_TITLE = sectionPattern("General supplement", "通用补充");
     private static final Pattern COURSE_TITLE = sectionPattern("Course basis", "课程依据");
 
-    public record Citation(String raw, String document, int startPage, int endPage) {
+    public record Citation(
+            String raw,
+            String document,
+            String locatorType,
+            int startPage,
+            int endPage) {
     }
 
     public List<Citation> parse(String answer) {
@@ -42,11 +48,13 @@ public final class CitationValidator {
         }
         Matcher matcher = CITATION_PATTERN.matcher(answer);
         while (matcher.find()) {
-            int start = Integer.parseInt(matcher.group(2));
-            int end = matcher.group(3) == null ? start : Integer.parseInt(matcher.group(3));
+            int start = Integer.parseInt(matcher.group(3));
+            int end = matcher.group(4) == null ? start : Integer.parseInt(matcher.group(4));
+            String prefix = matcher.group(2).toLowerCase(Locale.ROOT);
             citations.add(new Citation(
                     matcher.group(),
                     matcher.group(1).trim(),
+                    locatorType(prefix),
                     Math.min(start, end),
                     Math.max(start, end)));
         }
@@ -90,10 +98,9 @@ public final class CitationValidator {
                 continue;
             }
             String key = citation.document().toLowerCase(Locale.ROOT)
+                    + "|" + citation.locatorType()
                     + "|" + citation.startPage() + "-" + citation.endPage();
-            String locator = citation.startPage() == citation.endPage()
-                    ? "p." + citation.startPage()
-                    : "pp." + citation.startPage() + "-" + citation.endPage();
+            String locator = formatLocator(citation);
             sources.putIfAbsent(key, new SourceReference(
                     block.chunk().getFileName(),
                     block.chunk().getDocTitle(),
@@ -225,6 +232,9 @@ public final class CitationValidator {
             if (!documentMatches(citation.document(), chunk)) {
                 continue;
             }
+            if (!citation.locatorType().equalsIgnoreCase(chunk.getLocatorType())) {
+                continue;
+            }
             int overlapStart = Math.max(citation.startPage(), chunk.getPageStart());
             int overlapEnd = Math.min(citation.endPage(), chunk.getPageEnd());
             if (overlapStart <= overlapEnd) {
@@ -253,5 +263,45 @@ public final class CitationValidator {
 
     private String normalize(String value) {
         return value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    }
+
+    private static String locatorType(String prefix) {
+        return switch (prefix) {
+            case "slide", "slides" -> "SLIDE";
+            case "section", "sections" -> "SECTION";
+            case "sheet", "sheets" -> "SHEET";
+            case "image", "images" -> "IMAGE";
+            default -> "PAGE";
+        };
+    }
+
+    private static String formatLocator(Citation citation) {
+        String singular;
+        String plural;
+        switch (citation.locatorType()) {
+            case "SLIDE":
+                singular = "slide ";
+                plural = "slides ";
+                break;
+            case "SECTION":
+                singular = "section ";
+                plural = "sections ";
+                break;
+            case "SHEET":
+                singular = "sheet ";
+                plural = "sheets ";
+                break;
+            case "IMAGE":
+                singular = "image ";
+                plural = "images ";
+                break;
+            default:
+                singular = "p.";
+                plural = "pp.";
+                break;
+        }
+        return citation.startPage() == citation.endPage()
+                ? singular + citation.startPage()
+                : plural + citation.startPage() + "-" + citation.endPage();
     }
 }

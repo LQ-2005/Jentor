@@ -6,7 +6,14 @@ import com.tongji.cst3492.jentor.model.Chunk;
 import com.tongji.cst3492.jentor.model.CourseIndex;
 import com.tongji.cst3492.jentor.model.DocumentMeta;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.PDXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.io.IOException;
@@ -76,12 +83,18 @@ public final class PdfCourseIndexBuilder {
         if (pdf == null || !Files.isRegularFile(pdf)) {
             throw new IOException("Course PDF does not exist: " + pdf);
         }
-        List<PageText> pages = extractPages(pdf);
+        List<ExtractedPage> pages = extractPages(pdf);
         String title = stripExtension(pdf.getFileName().toString());
         DocumentMeta document = new DocumentMeta(documentId, title,
                 pdf.getFileName().toString(), pages.size());
         List<RawChunk> chunks = new ArrayList<>();
-        for (PageText page : pages) {
+        int tableCount = 0;
+        int imageCount = 0;
+        boolean ocrUsed = false;
+        for (ExtractedPage page : pages) {
+            tableCount += page.tableCount();
+            imageCount += page.imageCount();
+            ocrUsed |= page.ocrUsed();
             String pageTitle = pageTitle(page.text());
             List<String> pieces = splitPage(page.text());
             for (int chunkIndex = 0; chunkIndex < pieces.size(); chunkIndex++) {
@@ -89,6 +102,7 @@ public final class PdfCourseIndexBuilder {
                         documentId,
                         title,
                         pdf.getFileName().toString(),
+                        "PAGE",
                         page.number(),
                         chunkIndex,
                         pageTitle,
@@ -98,7 +112,8 @@ public final class PdfCourseIndexBuilder {
         if (chunks.isEmpty()) {
             throw new IOException("No extractable text found in " + pdf.getFileName());
         }
-        return new ParsedDocument(document, chunks);
+        return new ParsedDocument(document, chunks, tableCount, imageCount, ocrUsed,
+                ocrUsed ? "PDFBox + Tess4J OCR" : "PDFBox");
     }
 
     public static CourseIndex aggregate(List<ParsedDocument> parsedDocuments) {
@@ -149,7 +164,7 @@ public final class PdfCourseIndexBuilder {
                     pendingChunk.docId(),
                     pendingChunk.docTitle(),
                     pendingChunk.fileName(),
-                    "PAGE",
+                    pendingChunk.locatorType(),
                     pendingChunk.page(),
                     pendingChunk.page(),
                     pendingChunk.chunkIndex(),
@@ -177,6 +192,7 @@ public final class PdfCourseIndexBuilder {
                             chunk.getDocId(),
                             chunk.getDocTitle(),
                             chunk.getFileName(),
+                            chunk.getLocatorType(),
                             chunk.getPageStart(),
                             chunk.getChunkIndex(),
                             chunk.getTitle(),
@@ -204,15 +220,41 @@ public final class PdfCourseIndexBuilder {
         }
     }
 
-    private static List<PageText> extractPages(Path pdf) throws IOException {
+    private static List<ExtractedPage> extractPages(Path pdf) throws IOException {
         try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
-            List<PageText> pages = new ArrayList<>();
+            List<ExtractedPage> pages = new ArrayList<>();
+            PDFRenderer renderer = new PDFRenderer(document);
             for (int page = 1; page <= document.getNumberOfPages(); page++) {
                 String layout = cleanText(stripPage(document, page, true), page);
                 String plain = cleanText(stripPage(document, page, false), page);
                 String text = choosePageText(layout, plain);
+                TableMarkup markup = annotateTables(text);
+                StringBuilder combined = new StringBuilder(markup.text());
+                int images = 0;
+                boolean ocrUsed = false;
+                PDPage pdfPage = document.getPage(page - 1);
+                for (String imageText : ocrEmbeddedImages(pdfPage)) {
+                    images++;
+                    if (!imageText.isBlank()) {
+                        combined.append("\n[Image OCR]\n").append(imageText);
+                        ocrUsed = true;
+                    }
+                }
+                if (!OcrEngine.isLikelyUsefulText(combined.toString())) {
+                    try {
+                        String pageOcr = OcrEngine.recognize(renderer.renderImageWithDPI(
+                                page - 1, 180, ImageType.RGB));
+                        if (!pageOcr.isBlank()) {
+                            combined.append("\n[OCR]\n").append(pageOcr);
+                            ocrUsed = true;
+                        }
+                    } catch (Throwable ignored) {
+                        // Keep native text when OCR is unavailable or fails.
+                    }
+                }
+                text = combined.toString().strip();
                 if (!text.isBlank()) {
-                    pages.add(new PageText(page, text));
+                    pages.add(new ExtractedPage(page, text, markup.tableCount(), images, ocrUsed));
                 }
             }
             return pages;
@@ -220,6 +262,100 @@ public final class PdfCourseIndexBuilder {
             throw new IOException("Cannot parse " + pdf.getFileName() + ": "
                     + error.getMessage(), error);
         }
+    }
+
+    private static List<String> ocrEmbeddedImages(PDPage page) {
+        List<String> result = new ArrayList<>();
+        try {
+            PDResources resources = page.getResources();
+            if (resources == null) {
+                return result;
+            }
+            for (COSName name : resources.getXObjectNames()) {
+                PDXObject object = resources.getXObject(name);
+                if (!(object instanceof PDImageXObject image)) {
+                    continue;
+                }
+                if (image.getWidth() < 160 || image.getHeight() < 80) {
+                    continue;
+                }
+                try {
+                    result.add(OcrEngine.recognize(image.getImage()));
+                } catch (Throwable ignored) {
+                    result.add("");
+                }
+            }
+        } catch (IOException ignored) {
+            // A malformed image does not invalidate the page's text layer.
+        }
+        return result;
+    }
+
+    private static TableMarkup annotateTables(String text) {
+        String[] lines = text.split("\\R", -1);
+        List<String> output = new ArrayList<>(lines.length);
+        int tables = 0;
+        int i = 0;
+        while (i < lines.length) {
+            int columns = columnCount(lines[i]);
+            if (columns < 2) {
+                output.add(lines[i++]);
+                continue;
+            }
+            int start = i;
+            List<String> block = new ArrayList<>();
+            int expectedColumns = columns;
+            while (i < lines.length && columnCount(lines[i]) == expectedColumns) {
+                block.add(toColumns(lines[i]));
+                i++;
+            }
+            if (block.size() >= 2) {
+                tables++;
+                output.add("[TABLE]");
+                output.addAll(block);
+                output.add("[/TABLE]");
+            } else {
+                for (int j = start; j < i; j++) {
+                    output.add(lines[j]);
+                }
+            }
+        }
+        return new TableMarkup(String.join("\n", output), tables);
+    }
+
+    private static int columnCount(String line) {
+        String stripped = line.strip();
+        if (stripped.isEmpty()) {
+            return 0;
+        }
+        int explicit = stripped.split("\\t|\\s{2,}").length;
+        if (explicit >= 2) {
+            return explicit;
+        }
+        if (looksLikeDenseRow(stripped)) {
+            return stripped.split("\\s+").length;
+        }
+        return 1;
+    }
+
+    private static boolean looksLikeDenseRow(String line) {
+        if (line.length() > 160 || line.matches(".*[.!?;:].*")) {
+            return false;
+        }
+        String[] words = line.split("\\s+");
+        if (words.length < 2 || words.length > 8) {
+            return false;
+        }
+        return Character.isUpperCase(words[0].charAt(0))
+                || words[0].matches(".*[A-Z_$].*");
+    }
+
+    private static String toColumns(String line) {
+        String stripped = line.stripTrailing();
+        if (stripped.contains("\t") || stripped.matches(".*\\s{2,}.*")) {
+            return stripped.replaceAll("\\s{2,}", "\t");
+        }
+        return String.join("\t", stripped.strip().split("\\s+"));
     }
 
     private static String stripPage(PDDocument document, int page, boolean layout)
@@ -368,12 +504,31 @@ public final class PdfCourseIndexBuilder {
         }
     }
 
-    private record PageText(int number, String text) {
+    private record ExtractedPage(
+            int number,
+            String text,
+            int tableCount,
+            int imageCount,
+            boolean ocrUsed) {
     }
 
-    public record ParsedDocument(DocumentMeta document, List<RawChunk> chunks) {
+    private record TableMarkup(String text, int tableCount) {
+    }
+
+    public record ParsedDocument(
+            DocumentMeta document,
+            List<RawChunk> chunks,
+            int tableCount,
+            int imageCount,
+            boolean ocrUsed,
+            String parser) {
         public ParsedDocument {
             chunks = chunks == null ? List.of() : List.copyOf(chunks);
+            parser = parser == null ? "" : parser;
+        }
+
+        public ParsedDocument(DocumentMeta document, List<RawChunk> chunks) {
+            this(document, chunks, 0, 0, false, "");
         }
     }
 
@@ -381,12 +536,20 @@ public final class PdfCourseIndexBuilder {
             String docId,
             String docTitle,
             String fileName,
+            String locatorType,
             int page,
             int chunkIndex,
             String title,
             String text) {
         private String key() {
-            return docId + "-p" + page + "-c" + chunkIndex;
+            String prefix = switch (locatorType == null ? "PAGE" : locatorType.toUpperCase()) {
+                case "SLIDE" -> "s";
+                case "SECTION" -> "sec";
+                case "SHEET" -> "sh";
+                case "IMAGE" -> "img";
+                default -> "p";
+            };
+            return docId + "-" + prefix + page + "-c" + chunkIndex;
         }
 
         private String indexedText() {
