@@ -2,6 +2,7 @@ package com.tongji.cst3492.jentor.ui;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -12,6 +13,10 @@ import com.intellij.ui.components.JBPanel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.util.ui.JBUI;
+import com.tongji.cst3492.jentor.conversation.Conversation;
+import com.tongji.cst3492.jentor.conversation.ConversationMessage;
+import com.tongji.cst3492.jentor.conversation.ConversationStore;
+import com.tongji.cst3492.jentor.conversation.ConversationSummary;
 import com.tongji.cst3492.jentor.llm.Answer;
 import com.tongji.cst3492.jentor.llm.ChatMessage;
 import com.tongji.cst3492.jentor.llm.CitationStatus;
@@ -62,10 +67,14 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
+    private static final Logger LOG = Logger.getInstance(ChatPanel.class);
     private static final int MAX_BODY_WIDTH = 760;
     private static final int BUBBLE_HORIZONTAL_PADDING = 10;
     private static final double USER_WIDTH_RATIO = 0.75;
@@ -84,13 +93,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private final Project project;
     private final CourseTaService service;
+    private final ConversationStore conversationStore;
+    private final ExecutorService conversationExecutor;
+    private final ConversationHistoryPanel historyPanel;
     private final JPanel transcriptPanel = new JPanel();
     private final JBScrollPane transcriptScroll = new JBScrollPane(transcriptPanel);
     private final JBTextArea input = new JBTextArea();
     private final ComposerSendButton sendButton = new ComposerSendButton();
     private final JButton settingsButton = new JButton();
-    private final JButton clearConversationButton = new JButton();
+    private final JButton historyButton = new JButton();
+    private final JButton newConversationButton = new JButton();
     private final JButton newReplyButton = new JButton();
+    private final JBLabel conversationTitleLabel = new JBLabel();
     private final JBLabel progressLabel = new JBLabel();
     private final JCheckBox workspaceBox = new JCheckBox();
     private final JComboBox<String> languageBox =
@@ -116,8 +130,11 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private ChatRequest currentRequest;
     private volatile StreamState streamState;
     private AssistantBubble streamCard;
+    private Conversation currentConversation;
     private boolean busy;
     private int requestGeneration;
+    private int historyLoadGeneration;
+    private volatile boolean disposed;
 
     public ChatPanel(Project project) {
         super(new BorderLayout(0, 8));
@@ -127,6 +144,29 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             resolvedService = new CourseTaService(project);
         }
         this.service = resolvedService;
+        this.conversationStore = ConversationStore.forProject(project);
+        this.conversationExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "Jentor conversation store");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.historyPanel = new ConversationHistoryPanel(
+                new ConversationHistoryPanel.Listener() {
+                    @Override
+                    public void open(ConversationSummary summary) {
+                        openConversation(summary);
+                    }
+
+                    @Override
+                    public void rename(ConversationSummary summary) {
+                        renameConversation(summary);
+                    }
+
+                    @Override
+                    public void delete(ConversationSummary summary) {
+                        deleteConversation(summary);
+                    }
+                });
         setBorder(JBUI.Borders.empty(8));
 
         transcriptPanel.setLayout(new BoxLayout(transcriptPanel, BoxLayout.Y_AXIS));
@@ -137,7 +177,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         transcriptScroll.getVerticalScrollBar().setUnitIncrement(16);
 
         add(createTopPanel(), BorderLayout.NORTH);
-        add(createCenterPanel(), BorderLayout.CENTER);
+        JPanel workspace = new JPanel(new BorderLayout(6, 0));
+        workspace.setOpaque(false);
+        historyPanel.setVisible(false);
+        workspace.add(historyPanel, BorderLayout.WEST);
+        workspace.add(createCenterPanel(), BorderLayout.CENTER);
+        add(workspace, BorderLayout.CENTER);
         add(createBottomPanel(), BorderLayout.SOUTH);
 
         appendWelcome();
@@ -165,6 +210,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (!queuedFiles.isEmpty()) {
             addFiles(queuedFiles);
         }
+        loadInitialConversationAsync(pending == null && queuedFiles.isEmpty());
     }
 
     public void setPendingContext(CodeContext context) {
@@ -209,8 +255,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel labels = new JPanel();
         labels.setLayout(new BoxLayout(labels, BoxLayout.Y_AXIS));
         labels.setOpaque(false);
+        conversationTitleLabel.setFont(
+                conversationTitleLabel.getFont().deriveFont(Font.BOLD, 12f));
+        conversationTitleLabel.setText(I18n.t(currentLanguage(), "newConversation"));
         progressLabel.setForeground(JBColor.GRAY);
         progressLabel.setVisible(false);
+        labels.add(conversationTitleLabel);
         labels.add(progressLabel);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -227,11 +277,13 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         });
         configureButton(settingsButton, event ->
                 ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
-        configureButton(clearConversationButton, event -> clearChat());
+        configureButton(historyButton, event -> toggleHistory());
+        configureButton(newConversationButton, event -> startNewConversation());
 
+        controls.add(historyButton);
+        controls.add(newConversationButton);
         controls.add(languageBox);
         controls.add(settingsButton);
-        controls.add(clearConversationButton);
 
         JPanel top = new JPanel(new BorderLayout(0, 4));
         top.setOpaque(false);
@@ -422,11 +474,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (question.isEmpty()) {
             return;
         }
+        historyLoadGeneration++;
         CodeContext codeContext = pendingContextSnapshot();
         boolean includeWorkspace = TaSettings.getInstance().getState().workspaceContext;
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
+        String sentAttachmentSummary = attachmentSummary();
+        long askedAt = System.currentTimeMillis();
 
-        appendMessage("user", question, false, true);
+        appendMessage("user", question, false, true, sentAttachmentSummary);
         input.setText("");
         busy = true;
         int generation = ++requestGeneration;
@@ -473,6 +528,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         finishStreamCard(answer);
                         if (answer.citationStatus() != CitationStatus.FAILED) {
                             rememberTurn(question, answer.text());
+                            recordCompletedTurn(
+                                    question,
+                                    sentAttachmentSummary,
+                                    answer,
+                                    askedAt,
+                                    System.currentTimeMillis());
                         }
                     } else {
                         discardStreamCard();
@@ -713,6 +774,15 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private void appendMessage(String role, String text, boolean warning, boolean userMessage) {
+        appendMessage(role, text, warning, userMessage, "");
+    }
+
+    private void appendMessage(
+            String role,
+            String text,
+            boolean warning,
+            boolean userMessage,
+            String attachmentSummary) {
         boolean user = "user".equals(role);
         boolean error = "error".equals(role);
         JPanel row = new ContentSizedPanel(new BorderLayout());
@@ -729,6 +799,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         bubble.add(roleLabel, BorderLayout.NORTH);
         MessageBody body = createMessageBody(text, user);
         bubble.add(body, BorderLayout.CENTER);
+        if (attachmentSummary != null && !attachmentSummary.isBlank()) {
+            JBLabel attachment = new JBLabel(attachmentSummary);
+            attachment.setFont(attachment.getFont().deriveFont(10f));
+            attachment.setForeground(JBColor.GRAY);
+            bubble.add(attachment, BorderLayout.SOUTH);
+        }
         row.add(bubble, user ? BorderLayout.EAST : BorderLayout.WEST);
         addRow(row, userMessage);
     }
@@ -918,12 +994,20 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         attachmentBar.setVisible(false);
     }
 
-    private void clearChat() {
-        requestGeneration++;
-        if (currentRequest != null) {
-            currentRequest.cancel();
-            currentRequest = null;
+    private void startNewConversation() {
+        if (!confirmConversationChange()) {
+            return;
         }
+        historyLoadGeneration++;
+        cancelActiveRequest();
+        resetConversationSurface();
+        currentConversation = null;
+        historyPanel.setActiveId("");
+        updateConversationTitle();
+    }
+
+    private void resetConversationSurface() {
+        requestGeneration++;
         busy = false;
         streamTimer.stop();
         streamState = null;
@@ -935,12 +1019,287 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingCodeContext = null;
         pendingFiles.clear();
         attachmentBar.setVisible(false);
+        input.setText("");
         setProgressText("");
         transcriptPanel.removeAll();
+        historyPanel.setActiveId("");
         appendWelcome();
         updateSendButton();
         transcriptPanel.revalidate();
         transcriptPanel.repaint();
+        input.requestFocusInWindow();
+    }
+
+    private boolean confirmConversationChange() {
+        return !busy || Messages.showYesNoDialog(
+                project,
+                I18n.t(currentLanguage(), "stopBeforeConversationChange"),
+                I18n.t(currentLanguage(), "conversationChangeTitle"),
+                Messages.getQuestionIcon()) == Messages.YES;
+    }
+
+    private void cancelActiveRequest() {
+        requestGeneration++;
+        if (currentRequest != null) {
+            currentRequest.cancel();
+            currentRequest = null;
+        }
+        discardStreamCard();
+        streamTimer.stop();
+        streamState = null;
+        streamedText.setLength(0);
+        busy = false;
+        setProgressText("");
+        updateSendButton();
+    }
+
+    private void recordCompletedTurn(
+            String question,
+            String sentAttachmentSummary,
+            Answer answer,
+            long askedAt,
+            long answeredAt) {
+        Conversation conversation = currentConversation;
+        if (conversation == null) {
+            conversation = Conversation.create(
+                    UUID.randomUUID().toString(), question, askedAt);
+        }
+        currentConversation = conversation.append(
+                ConversationMessage.user(question, askedAt, sentAttachmentSummary),
+                ConversationMessage.assistant(answer, answeredAt),
+                answeredAt);
+        updateConversationTitle();
+        persistConversationAsync(currentConversation);
+    }
+
+    private void updateConversationTitle() {
+        conversationTitleLabel.setText(currentConversation == null
+                ? I18n.t(currentLanguage(), "newConversation")
+                : currentConversation.title());
+    }
+
+    private void loadInitialConversationAsync(boolean restoreActiveConversation) {
+        int generation = ++historyLoadGeneration;
+        conversationExecutor.execute(() -> {
+            List<ConversationSummary> summaries = List.of();
+            Conversation active = null;
+            try {
+                summaries = conversationStore.summaries();
+            } catch (Exception error) {
+                LOG.warn("Cannot load Jentor conversation summaries", error);
+            }
+            if (restoreActiveConversation) {
+                try {
+                    active = conversationStore.loadActive();
+                } catch (Exception error) {
+                    LOG.warn("Cannot restore the last Jentor conversation", error);
+                }
+            }
+            List<ConversationSummary> loadedSummaries = summaries;
+            Conversation loadedActive = active;
+            ApplicationManager.getApplication().invokeLater(() -> {
+                if (disposed || generation != historyLoadGeneration) {
+                    return;
+                }
+                historyPanel.setSummaries(loadedSummaries);
+                if (loadedActive != null) {
+                    applyConversation(loadedActive);
+                } else {
+                    historyPanel.setActiveId("");
+                }
+            });
+        });
+    }
+
+    private void refreshHistoryAsync() {
+        conversationExecutor.execute(() -> {
+            try {
+                List<ConversationSummary> summaries = conversationStore.summaries();
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (disposed) {
+                        return;
+                    }
+                    historyPanel.setSummaries(summaries);
+                    historyPanel.setActiveId(
+                            currentConversation == null ? "" : currentConversation.id());
+                });
+            } catch (Exception error) {
+                LOG.warn("Cannot refresh Jentor conversation history", error);
+            }
+        });
+    }
+
+    private void persistConversationAsync(Conversation conversation) {
+        conversationExecutor.execute(() -> {
+            try {
+                conversationStore.save(conversation);
+                refreshHistoryAsync();
+            } catch (Exception error) {
+                LOG.warn("Cannot save Jentor conversation", error);
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (!disposed) {
+                        setProgressText(I18n.t(currentLanguage(), "conversationSaveFailed"));
+                    }
+                });
+            }
+        });
+    }
+
+    private void toggleHistory() {
+        boolean visible = !historyPanel.isVisible();
+        historyPanel.setVisible(visible);
+        revalidate();
+        repaint();
+        if (visible) {
+            refreshHistoryAsync();
+        }
+    }
+
+    private void openConversation(ConversationSummary summary) {
+        if (summary == null || (currentConversation != null
+                && summary.id().equals(currentConversation.id()))) {
+            return;
+        }
+        if (!confirmConversationChange()) {
+            historyPanel.setActiveId(
+                    currentConversation == null ? "" : currentConversation.id());
+            return;
+        }
+        cancelActiveRequest();
+        int generation = ++historyLoadGeneration;
+        setProgressText(I18n.t(currentLanguage(), "loadingConversation"));
+        conversationExecutor.execute(() -> {
+            try {
+                Conversation conversation = conversationStore.load(summary.id());
+                conversationStore.setLastActive(conversation.id());
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (disposed || generation != historyLoadGeneration) {
+                        return;
+                    }
+                    applyConversation(conversation);
+                });
+            } catch (Exception error) {
+                LOG.warn("Cannot load Jentor conversation " + summary.id(), error);
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (!disposed && generation == historyLoadGeneration) {
+                        setProgressText(I18n.t(currentLanguage(), "conversationLoadFailed"));
+                        historyPanel.setActiveId(
+                                currentConversation == null ? "" : currentConversation.id());
+                    }
+                });
+            }
+        });
+    }
+
+    private void applyConversation(Conversation conversation) {
+        currentConversation = conversation;
+        requestGeneration++;
+        busy = false;
+        streamTimer.stop();
+        streamState = null;
+        streamCard = null;
+        streamedText.setLength(0);
+        history.clear();
+        messageBodies.clear();
+        footnotes.clear();
+        pendingCodeContext = null;
+        pendingFiles.clear();
+        attachmentBar.setVisible(false);
+        transcriptPanel.removeAll();
+        input.setText("");
+        for (ConversationMessage message : conversation.messages()) {
+            if ("user".equals(message.role())) {
+                appendMessage("user", message.content(), false, false,
+                        message.attachmentSummary());
+            } else if ("assistant".equals(message.role())) {
+                appendAnswer(message.toAnswer());
+            }
+            history.add(message.toChatMessage());
+        }
+        while (history.size() > 8) {
+            history.remove(0);
+        }
+        if (transcriptPanel.getComponentCount() == 0) {
+            appendWelcome();
+        }
+        updateConversationTitle();
+        historyPanel.setActiveId(conversation.id());
+        setProgressText("");
+        updateSendButton();
+        transcriptPanel.revalidate();
+        transcriptPanel.repaint();
+        SwingUtilities.invokeLater(this::scrollToBottom);
+    }
+
+    private void renameConversation(ConversationSummary summary) {
+        if (summary == null) {
+            return;
+        }
+        String title = Messages.showInputDialog(
+                project,
+                I18n.t(currentLanguage(), "renameConversationPrompt"),
+                I18n.t(currentLanguage(), "renameConversation"),
+                Messages.getQuestionIcon(),
+                summary.title(),
+                null);
+        if (title == null || title.isBlank()) {
+            return;
+        }
+        conversationExecutor.execute(() -> {
+            try {
+                Conversation conversation = conversationStore.rename(summary.id(), title);
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (disposed) {
+                        return;
+                    }
+                    if (currentConversation != null
+                            && currentConversation.id().equals(conversation.id())) {
+                        currentConversation = conversation;
+                        updateConversationTitle();
+                    }
+                    refreshHistoryAsync();
+                });
+            } catch (Exception error) {
+                LOG.warn("Cannot rename Jentor conversation " + summary.id(), error);
+            }
+        });
+    }
+
+    private void deleteConversation(ConversationSummary summary) {
+        if (summary == null) {
+            return;
+        }
+        if (Messages.showYesNoDialog(
+                project,
+                I18n.t(currentLanguage(), "deleteConversationPrompt") + "\n\n"
+                        + summary.title(),
+                I18n.t(currentLanguage(), "deleteConversation"),
+                Messages.getQuestionIcon()) != Messages.YES) {
+            return;
+        }
+        boolean deletingActive = currentConversation != null
+                && summary.id().equals(currentConversation.id());
+        if (deletingActive) {
+            cancelActiveRequest();
+        }
+        conversationExecutor.execute(() -> {
+            try {
+                conversationStore.delete(summary.id());
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (disposed) {
+                        return;
+                    }
+                    if (deletingActive) {
+                        resetConversationSurface();
+                        currentConversation = null;
+                        updateConversationTitle();
+                    }
+                    refreshHistoryAsync();
+                });
+            } catch (Exception error) {
+                LOG.warn("Cannot delete Jentor conversation " + summary.id(), error);
+            }
+        });
     }
 
     private void updateModeSelector() {
@@ -990,7 +1349,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
-        clearConversationButton.setText(I18n.t(language, "clearConversation"));
+        historyButton.setText(I18n.t(language, "history"));
+        newConversationButton.setText(I18n.t(language, "newConversation"));
+        historyPanel.applyLanguage(language);
+        updateConversationTitle();
         updateModeSelector();
         updateSendButton();
         refreshAttachmentBar();
@@ -1029,6 +1391,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     @Override
     public void dispose() {
+        disposed = true;
         requestGeneration++;
         if (currentRequest != null) {
             currentRequest.cancel();
@@ -1037,6 +1400,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         modeTimer.stop();
         reflowTimer.stop();
         streamTimer.stop();
+        conversationExecutor.shutdownNow();
     }
 
     private static final class AssistantBubble {

@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.3.6.zip
+build/distributions/jentor-1.4.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,11 +147,19 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.3.6.zip`；
+3. 选择 `build/distributions/jentor-1.4.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
 ## 6. 配置模型
+
+管理历史对话：
+
+1. 点击聊天页顶部的“历史”展开对话列表；
+2. 点击一条记录即可恢复消息、引用和脚注；
+3. 右键记录可以重命名或删除；
+4. 点击“新对话”开始独立上下文，旧对话会自动保留；
+5. 历史保存在当前项目的 `.idea/jentor/conversations`，不会进入 Git。
 
 管理课程资料库：
 
@@ -242,14 +250,17 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.3.6 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.4.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
 - [ ] 中英文课程外问题都出现对应语言的灰色通用知识注脚
 - [ ] 引用来源可展开并查看原文摘录
 - [ ] 中文/English 切换正常
-- [ ] 聊天页只显示独立的“清空会话”按钮，不再出现课程资料菜单
+- [ ] “新对话”会创建独立会话，旧会话继续保留在历史中
+- [ ] 历史列表可以搜索、打开、重命名和删除
+- [ ] 重启 IDE 后能恢复上次打开的已完成对话
+- [ ] 历史保存在 `.idea/jentor/conversations`，不会出现在 Git 状态中
 - [ ] 聊天页顶部不再显示课程资料数量或独立 Mock 徽标
 - [ ] 工作区提问开关位于输入框左下角
 - [ ] 输入框右下角可在 Mock/DeepSeek 之间切换，模式文字悬停时显示圆角底色

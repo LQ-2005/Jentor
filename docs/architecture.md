@@ -169,7 +169,7 @@ is streaming, fenced code blocks are painted as plain read-only text areas; the
 real editor components are only created for the final render, so a fast stream
 cannot create and discard an editor several times per second. The per-request
 buffer is replaced on every new request, so a stale response cannot write into the
-current conversation, and `Clear`/stop drop the buffer immediately. The same
+current conversation, and switching/new-chat/stop drop the buffer immediately. The same
 streaming path is used by `MockChatClient`, which splits its deterministic answer
 into small chunks so the behaviour is testable offline.
 
@@ -251,9 +251,15 @@ characters, then inserts it between the system prompt and the current user
 prompt. This lets follow-up questions use pronouns such as "it" or "that".
 
 For retrieval, a short question or a question containing a pronoun also includes
-the previous user question in the search query. `Clear` resets both the visible
-chat and the in-memory history. History is intentionally in-memory for F0, so a
-tool-window recreation or IDE restart starts a new conversation.
+the previous user question in the search query.
+
+Completed turns are stored in `.idea/jentor/conversations`, which the repository
+ignores. `ConversationStore` separates a lightweight `index.json` from one JSON
+file per conversation; messages, source excerpts, disclosure text and citation
+state are restored lazily. Writes use temporary files and atomic replacement.
+A damaged index is rebuilt by scanning conversation files, while an unreadable
+individual file is skipped. Failed, cancelled and incomplete answers are not
+persisted.
 
 ## Cancellation and state isolation
 
@@ -264,20 +270,20 @@ future. The UI ignores any response whose request generation is stale or whose
 request was cancelled. Settings, language, Top-K, context limit, history, code
 snapshot, and the `AnswerService` (and therefore the index) are captured at
 request start. Index import is validated before the current index is replaced.
-Failed, cancelled, or citation-failed answers are not written into conversation
-memory.
+Failed, cancelled, or citation-failed answers are not written into persistent
+history.
 
 ## IDE integration
 
 - `CourseTaToolWindowFactory` creates the right-side **Jentor** tool window.
-- `ChatPanel` owns the transcript, rounded composer, settings controls, the
-  direct Clear conversation action, and the source list.
+- `ChatPanel` owns the transcript, rounded composer, New chat action, history
+  drawer, settings controls and source list.
 - `MessageBody` renders paragraphs, lists, inline code, and fenced code blocks.
   Code blocks use a read-only `EditorTextField` when a file type is available,
   with a language label and copy button; prose is escaped and rendered without
   executing model HTML.
-- The top bar exposes language, settings, and Clear conversation without mixing
-  in course-library actions. Course management, refresh, and manual JSON index
+- The top bar exposes History, New chat, language and settings without mixing in
+  course-library actions. Course management, refresh, and manual JSON index
   import belong to the Course materials tab. The composer footer places the
   workspace-context checkbox at bottom-left and a borderless `Mock / DeepSeek`
   selector plus a single-arrow send/stop button at bottom-right. The mode

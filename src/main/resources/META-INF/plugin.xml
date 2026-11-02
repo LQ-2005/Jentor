@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.tongji.cst3492.jentor</id>
     <name>Jentor</name>
-    <version>1.3.6</version>
+    <version>1.4.0</version>
     <vendor>Tongji University</vendor>
 
     <description>
@@ -10,8 +10,9 @@
         lecture slides, answers questions with document and page citations, and can
         independently manage PDF, Office, text, web and image course materials from
         any folder, use structured tables and offline English/Chinese OCR, and attach
-        selected editor code or workspace source files to the conversation. Source
-        files are never modified or deleted.
+        selected editor code or workspace source files to the conversation. Chats
+        are saved locally per project with new-chat, search, rename and delete
+        controls. Source files are never modified or deleted.
     </description>
 
     <idea-version since-build="252" until-build="262.*"/>

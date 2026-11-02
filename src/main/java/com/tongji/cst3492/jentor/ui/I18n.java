@@ -37,6 +37,25 @@ public final class I18n {
             case "remove" -> zh ? "移除" : "Remove";
             case "attachmentTitle" -> zh ? "代码附件" : "Code attachment";
             case "newReply" -> zh ? "有新回复" : "New reply";
+            case "history" -> zh ? "历史" : "History";
+            case "newConversation" -> zh ? "新对话" : "New chat";
+            case "loadingConversation" -> zh ? "正在加载对话…" : "Loading conversation...";
+            case "conversationLoadFailed" -> zh
+                    ? "无法加载该对话" : "Cannot load the conversation";
+            case "conversationSaveFailed" -> zh
+                    ? "对话保存失败" : "Cannot save the conversation";
+            case "stopBeforeConversationChange" -> zh
+                    ? "当前回答仍在生成，继续将停止生成并切换对话。"
+                    : "An answer is still being generated. Continuing will stop it and switch conversations.";
+            case "conversationChangeTitle" -> zh
+                    ? "切换对话" : "Switch conversation";
+            case "renameConversation" -> zh ? "重命名对话" : "Rename conversation";
+            case "renameConversationPrompt" -> zh
+                    ? "输入新的对话名称：" : "Enter a new conversation title:";
+            case "deleteConversation" -> zh ? "删除对话" : "Delete conversation";
+            case "deleteConversationPrompt" -> zh
+                    ? "删除这条历史对话？课程资料不会被删除。"
+                    : "Delete this conversation? Course materials will not be deleted.";
             case "retry" -> zh ? "重试" : "Retry";
             case "openSettings" -> zh ? "打开设置" : "Open settings";
             case "importIndexAction" -> zh ? "导入索引" : "Import index";
@@ -75,7 +94,6 @@ public final class I18n {
                     ? "课程资料库等待首次索引"
                     : "Course library is waiting for its first index";
             case "importIndex" -> zh ? "导入课程索引" : "Import course index";
-            case "clearConversation" -> zh ? "清空会话" : "Clear conversation";
             case "warning" -> zh ? "提示：" : "Warning: ";
             case "indexStatus" -> zh ? "索引：" : "Index: ";
             case "indexError" -> zh ? "索引错误：" : "Index error: ";

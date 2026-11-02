@@ -56,7 +56,8 @@ This is the F0 baseline required for every group.
 - Mixed course/general answers also move the fallback sentence to the gray
   footnote rather than leaving it inside the General supplement body.
 - A bilingual (中文 / English) IntelliJ tool window with left/right chat bubbles,
-  language selection, settings, and a direct **Clear conversation** button.
+  language selection, settings, a **New chat** action, and a collapsible history
+  drawer.
   Course material actions live only in the **Course materials** tab, not in the
   chat header. The rounded composer has the workspace-context checkbox at
   bottom-left and a borderless `Mock / DeepSeek` selector plus an icon-only
@@ -64,9 +65,11 @@ This is the F0 baseline required for every group.
   text and a chevron until hovered, then gains a rounded hover background. The
   answer language follows the selector. English mode uses the original fallback
   sentence; Chinese mode uses the equivalent Chinese sentence.
-- Multi-turn conversation memory: the most recent user/assistant turns are sent
-  to the LLM, and short follow-up questions use the previous user question for
-  retrieval. Clear resets the conversation.
+- Persistent, project-local conversations: completed question/answer turns are
+  saved under `.idea/jentor/conversations`, and the last active conversation is
+  restored when the tool window is opened again. The history drawer supports
+  search, open, rename and delete. The most recent turns are still sent to the
+  LLM for multi-turn follow-ups.
 - Generation can be stopped. The request carries a cancellation token; the task
   and, where supported, the HTTP request are cancelled. Stale responses cannot
   update the UI or conversation memory.
@@ -169,7 +172,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.6.zip
+build\distributions\jentor-1.4.0.zip
 ```
 
 Install it into IntelliJ:
@@ -198,6 +201,8 @@ In IntelliJ:
    are attached; **Remove** detaches them again.
 9. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
    outline to every question; clear it to send course context only.
+10. Use **History** to reopen an earlier conversation, or **New chat** to start a
+    separate conversation. Deleting history entries does not delete course files.
 
 To check the UI and citation path without an API key, open the settings and
 enable **Use offline mock model**. The mock model cites the first retrieved
