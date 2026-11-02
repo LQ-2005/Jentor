@@ -66,6 +66,29 @@ class AnswerServiceCitationTest {
                 .anyMatch(warning -> warning.contains("CITATION_IN_GENERAL_SECTION")));
     }
 
+    @Test
+    void mixedAnswerMovesGeneralKnowledgeDisclosureToTheFootnote() throws IOException {
+        ChatClient client = new ChatClient() {
+            @Override
+            public String complete(LlmConfig config, List<ChatMessage> messages,
+                                   CancellationToken token) {
+                String mock = new MockChatClient().complete(config, messages, token);
+                String citation = new CitationValidator().parse(mock).getFirst().raw();
+                return "## Course basis\nJava is popular. " + citation
+                        + "\n## General supplement\n"
+                        + PromptBuilder.FALLBACK_SENTENCE
+                        + "\nPython currently leads many popularity rankings.";
+            }
+        };
+
+        Answer answer = ask(client);
+
+        assertEquals(CitationStatus.VALIDATED, answer.citationStatus());
+        assertEquals(PromptBuilder.FALLBACK_SENTENCE, answer.disclosure());
+        assertFalse(answer.text().contains(PromptBuilder.FALLBACK_SENTENCE));
+        assertTrue(answer.text().contains("Python currently leads"));
+    }
+
     private static Answer ask(ChatClient client) throws IOException {
         return new AnswerService(retriever, client).answer(QUESTION, CodeContext.empty(),
                 CONFIG, 5, 0.45, 6000, "en", List.of(), new CancellationToken(), null);

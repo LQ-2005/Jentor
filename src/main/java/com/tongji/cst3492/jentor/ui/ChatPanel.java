@@ -723,41 +723,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void showSource(SourceReference source) {
         CourseDocumentSource managed = service.getCourseLibraryService()
                 .sourceForDocumentId(source.docId());
-        String location = managed == null ? "" : managed.path();
-        String text = "File: " + source.fileName() + "\n"
-                + "Location: " + source.locator() + "\n"
-                + (location.isBlank() ? "" : "Original location: " + location + "\n")
-                + "\n"
-                + "Excerpt:\n" + source.excerpt();
-        if (location.isBlank()) {
-            Messages.showInfoMessage(project, text,
-                    I18n.t(currentLanguage(), "sourcesCount"));
-            return;
-        }
-        int choice = Messages.showDialog(project, text,
-                I18n.t(currentLanguage(), "sourcesCount"),
-                new String[]{"Open file", "Show folder", "Copy path", "Close"},
-                0, Messages.getInformationIcon());
-        Path path = Path.of(location);
-        if (choice == 0) {
-            openPath(path);
-        } else if (choice == 1 && path.getParent() != null) {
-            openPath(path.getParent());
-        } else if (choice == 2) {
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(location), null);
-        }
-    }
-
-    private void openPath(Path path) {
-        try {
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(path.toFile());
-            }
-        } catch (Exception error) {
-            Messages.showErrorDialog(project, error.getMessage(),
-                    I18n.t(currentLanguage(), "courseMaterials"));
-        }
+        new SourcePreviewDialog(project, source, managed).show();
     }
 
     private void appendMessage(String role, String text, boolean warning, boolean userMessage) {

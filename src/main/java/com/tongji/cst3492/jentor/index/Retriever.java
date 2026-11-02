@@ -162,7 +162,7 @@ public final class Retriever {
         double totalWeight = 0.0;
         double matchedWeight = 0.0;
         for (String term : queryTerms) {
-            if (containsCjk(term)) {
+            if (containsCjk(term) && !index.getIdf().containsKey(term)) {
                 continue;
             }
             double weight = index.getIdf().getOrDefault(term, index.getDefaultIdf());

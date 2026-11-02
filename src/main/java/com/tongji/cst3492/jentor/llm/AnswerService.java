@@ -186,14 +186,12 @@ public final class AnswerService {
                         ? List.of()
                         : citationValidator.citedSources(text, ragContext.blocks());
         String disclosure = "";
-        if (status == CitationStatus.NOT_APPLICABLE) {
-            String fallback = "zh".equals(language)
-                    ? PromptBuilder.FALLBACK_SENTENCE_ZH
-                    : PromptBuilder.FALLBACK_SENTENCE;
-            if (text.contains(fallback)) {
-                text = stripDisclosure(text, fallback);
-                disclosure = fallback;
-            }
+        String fallback = "zh".equals(language)
+                ? PromptBuilder.FALLBACK_SENTENCE_ZH
+                : PromptBuilder.FALLBACK_SENTENCE;
+        if (text.contains(fallback)) {
+            text = stripDisclosure(text, fallback);
+            disclosure = fallback;
         }
         return new Answer(
                 text,

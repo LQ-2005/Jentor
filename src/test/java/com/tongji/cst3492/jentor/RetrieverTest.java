@@ -155,6 +155,18 @@ class RetrieverTest {
     }
 
     @Test
+    void genericChinesePopularityQuestionFindsTheJavaPopularityPage() {
+        String expanded = CourseGlossary.expand("世界上最受欢迎的编程语言是什么？");
+        List<RetrievedChunk> results = retriever.retrieve(expanded, 3);
+
+        assertTrue(retriever.isGrounded(results, 0.45));
+        assertTrue(results.stream().anyMatch(result ->
+                result.getChunk().getFileName().equals("Lec-1-Java-Fundamentals.pdf")
+                        && result.getChunk().getPageStart() <= 2
+                        && 2 <= result.getChunk().getPageEnd()));
+    }
+
+    @Test
     void promptIncludesHistoryAndCodeContext() {
         CodeContext context = new CodeContext(
                 "Foo.java",

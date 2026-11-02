@@ -40,10 +40,15 @@ This is the F0 baseline required for every group.
 - Sources contain only citations actually used and validated in the answer,
   deduplicated by document/page. Unused retrieval candidates appear only in a
   collapsible debug section.
+- Clicking a source opens an in-IDE preview. PDF citations render the exact cited
+  page without an external reader; image sources show the original image; all
+  sources retain the sent excerpt, original path and open-folder actions.
 - The required fallback sentence when no course material is relevant:
   `Response is based on general knowledge; no specific course material is referenced.`
   In the UI it is shown as a small gray footnote under the answer body, not as
   part of the answer text.
+- Mixed course/general answers also move the fallback sentence to the gray
+  footnote rather than leaving it inside the General supplement body.
 - A bilingual (中文 / English) IntelliJ tool window with left/right chat bubbles,
   an index summary, language selection, and send/clear/settings controls. The
   answer language follows the selector. English mode uses the original fallback
@@ -154,7 +159,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.0.zip
+build\distributions\jentor-1.3.1.zip
 ```
 
 Install it into IntelliJ:

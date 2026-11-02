@@ -32,6 +32,8 @@ public final class PromptBuilder {
             [<document name>, <locator>], copying the locator printed for that excerpt.
             Supported forms include p./pp., slide(s), section(s), sheet(s), and image(s).
             Never invent a document name, page number, or quotation.
+            Cite only excerpts that directly support the latest user question. Do not add
+            tangential citations merely to make the answer appear better sourced.
             Structure the answer with a "Course basis" (课程依据) section and, only if
             needed, a separate "General supplement" (通用补充) section. Do not attach
             course citations to general-knowledge content.

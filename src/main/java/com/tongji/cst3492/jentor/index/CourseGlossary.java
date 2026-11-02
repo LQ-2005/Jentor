@@ -43,6 +43,14 @@ public final class CourseGlossary {
         TERMS.put("Lambda 表达式", "lambda expression");
         TERMS.put("流式处理", "streams");
         TERMS.put("事务", "transaction");
+        TERMS.put("最受欢迎", "most popular popularity rank tiobe programming language developer index");
+        TERMS.put("受欢迎", "popular popularity");
+        TERMS.put("编程语言", "programming language");
+        TERMS.put("开发者数量", "developer count");
+        TERMS.put("开发者", "developer");
+        TERMS.put("指数", "index");
+        TERMS.put("企业级", "enterprise");
+        TERMS.put("后端", "backend");
     }
 
     private CourseGlossary() {
