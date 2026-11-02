@@ -116,7 +116,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final ComposerModeButton modeButton = new ComposerModeButton();
     private final JPopupMenu modeMenu = new JPopupMenu();
     private final JMenuItem mockModeItem = new JMenuItem("Mock");
-    private final JMenuItem deepSeekModeItem = new JMenuItem("DeepSeek");
+    private final JMenuItem onlineModeItem = new JMenuItem();
     private final JPanel attachmentBar = new JPanel(new BorderLayout(6, 0));
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
@@ -284,8 +284,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             state.language = languageBox.getSelectedIndex() == 0 ? "zh" : "en";
             updateLanguageUi();
         });
-        configureButton(settingsButton, event ->
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
+        configureButton(settingsButton, event -> showSettings());
         configureButton(historyButton, event -> toggleHistory());
         configureButton(newConversationButton, event -> startNewConversation());
 
@@ -331,12 +330,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         modeButton.setIcon(AllIcons.General.ArrowDown);
         modeButton.setIconTextGap(4);
         modeButton.setBorder(JBUI.Borders.empty(4, 8));
-        modeButton.addActionListener(event ->
-                modeMenu.show(modeButton, 0, -modeMenu.getPreferredSize().height));
+        modeButton.addActionListener(event -> {
+            updateModeSelector();
+            modeMenu.show(modeButton, 0, -modeMenu.getPreferredSize().height);
+        });
         mockModeItem.addActionListener(event -> selectMode(true));
-        deepSeekModeItem.addActionListener(event -> selectMode(false));
+        onlineModeItem.addActionListener(event -> selectMode(false));
         modeMenu.add(mockModeItem);
-        modeMenu.add(deepSeekModeItem);
+        modeMenu.add(onlineModeItem);
     }
 
     private JPanel createCenterPanel() {
@@ -847,8 +848,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 : I18n.t(language, "retry");
         Runnable action;
         if (settings) {
-            action = () -> ShowSettingsUtil.getInstance()
-                    .showSettingsDialog(project, TaConfigurable.class);
+            action = this::showSettings;
         } else if (index) {
             action = this::showCourseLibrary;
         } else {
@@ -1332,10 +1332,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void updateModeSelector() {
         String language = currentLanguage();
-        boolean mock = TaSettings.getInstance().getState().useMockModel;
-        modeButton.setText(mock ? I18n.t(language, "mockMode")
-                : I18n.t(language, "deepSeekMode"));
+        TaSettings.State state = TaSettings.getInstance().getState();
+        String onlineModel = state.chatModel == null || state.chatModel.isBlank()
+                ? I18n.t(language, "onlineMode") : state.chatModel.trim();
+        mockModeItem.setText(I18n.t(language, "mockMode"));
+        onlineModeItem.setText(onlineModel);
+        modeButton.setText(state.useMockModel ? mockModeItem.getText() : onlineModel);
         updateModeTooltip();
+    }
+
+    private void showSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class);
+        updateModeSelector();
     }
 
     private void updateWorkspaceTooltip() {
@@ -1345,7 +1353,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void updateModeTooltip() {
         String language = currentLanguage();
         boolean mock = TaSettings.getInstance().getState().useMockModel;
-        String hint = I18n.t(language, mock ? "mockModeHint" : "deepSeekModeHint");
+        String hint = I18n.t(language, mock ? "mockModeHint" : "onlineModeHint");
         modeButton.setToolTipText(hint);
         modeButton.getAccessibleContext().setAccessibleName(
                 modeButton.getText() + " - " + hint);

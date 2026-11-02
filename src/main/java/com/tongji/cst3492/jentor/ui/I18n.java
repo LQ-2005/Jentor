@@ -79,8 +79,8 @@ public final class I18n {
                     ? "每次提问时附加项目结构和相关代码摘录"
                     : "Include the project structure and relevant code excerpts";
             case "mockMode" -> "Mock";
-            case "deepSeekMode" -> "DeepSeek";
-            case "deepSeekModeHint" -> zh
+            case "onlineMode" -> zh ? "在线模型" : "Online model";
+            case "onlineModeHint" -> zh
                     ? "使用设置中配置的在线 API 模型"
                     : "Use the configured online API model";
             case "mockModeHint" -> zh
