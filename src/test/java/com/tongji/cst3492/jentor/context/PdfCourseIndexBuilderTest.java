@@ -53,6 +53,7 @@ class PdfCourseIndexBuilderTest {
         assertEquals(index.getDefaultIdf(), loaded.getDefaultIdf(), 0.000001f);
         assertEquals(index.getChunks().getFirst().getId(),
                 loaded.getChunks().getFirst().getId());
+        assertEquals(1, PdfCourseIndexBuilder.fromIndex(loaded).size());
     }
 
     @Test
@@ -85,6 +86,29 @@ class PdfCourseIndexBuilderTest {
         assertTrue(first.startsWith("java-"));
         assertTrue(second.startsWith("java-"));
         assertNotEquals(first, second);
+    }
+
+    @Test
+    void aggregatesDocumentsFromIndependentFolders() throws Exception {
+        Path firstFolder = temporary.resolve("week-1");
+        Path secondFolder = temporary.resolve("external-module");
+        java.nio.file.Files.createDirectories(firstFolder);
+        java.nio.file.Files.createDirectories(secondFolder);
+        Path firstPdf = firstFolder.resolve("Java-Basics.pdf");
+        Path secondPdf = secondFolder.resolve("Spring-Security.pdf");
+        createPdf(firstPdf, List.of("Arrays\nArrays store values."));
+        createPdf(secondPdf, List.of("Security\nFilters protect requests."));
+
+        var first = PdfCourseIndexBuilder.parse(firstPdf);
+        var second = PdfCourseIndexBuilder.parse(secondPdf);
+        CourseIndex index = PdfCourseIndexBuilder.aggregate(List.of(first, second));
+
+        assertEquals(2, index.getDocuments().size());
+        assertEquals(2, PdfCourseIndexBuilder.fromIndex(index).size());
+        assertTrue(index.getDocuments().stream()
+                .anyMatch(document -> document.getFileName().equals("Java-Basics.pdf")));
+        assertTrue(index.getDocuments().stream()
+                .anyMatch(document -> document.getFileName().equals("Spring-Security.pdf")));
     }
 
     private static void createPdf(Path path, List<String> pages) throws Exception {

@@ -74,9 +74,6 @@ public final class I18n {
             case "courseMaterialsWaiting" -> zh
                     ? "课程资料库等待首次索引"
                     : "Course library is waiting for its first index";
-            case "courseLibraryPath" -> zh
-                    ? "课程 PDF 目录："
-                    : "Course PDF folder: ";
             case "importIndex" -> zh ? "导入课程索引" : "Import course index";
             case "clearConversation" -> zh ? "清空会话" : "Clear conversation";
             case "warning" -> zh ? "提示：" : "Warning: ";

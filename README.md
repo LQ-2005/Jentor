@@ -13,11 +13,11 @@ This is the F0 baseline required for every group.
 
 - A page-aware course index built from the nine lecture PDFs:
   **9 documents, 199 pages, 214 chunks**.
-- A managed course PDF library: choose a folder in settings and Jentor extracts,
-  chunks, indexes and atomically swaps the complete index when PDFs are added,
-  replaced or removed. PDFBox runs inside the plugin, so adding courseware no
-  longer requires Python or rebuilding the ZIP. VFS events are debounced and a
-  30-second fingerprint sweep catches missed external changes.
+- An independently managed course PDF catalog: add files or folders from any
+  location in the **Course materials** tab. Each PDF records its original path,
+  status, page/chunk counts and errors. PDFBox parses in the background, VFS
+  changes and a 30-second fingerprint sweep trigger updates, and the previous
+  valid index remains active until the new aggregate is complete.
 - BM25-first hybrid retrieval with a hashed TF-IDF vector as a tie-breaker.
 - Exact-title and phrase boosts so "what is X?" questions reach the slide that
   defines X instead of a longer overview slide.
@@ -152,7 +152,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.1.0.zip
+build\distributions\jentor-1.2.0.zip
 ```
 
 Install it into IntelliJ:
@@ -166,7 +166,7 @@ Install it into IntelliJ:
 In IntelliJ:
 
 1. Open **Settings | Tools | Jentor**.
-2. Under **Course library**, choose the folder containing all course PDFs.
+2. Open **Jentor → Course materials** and add course PDFs from any folders.
 3. Set the base URL and chat model.
 4. Paste the API key.
    Streaming is enabled by default; clear **Stream the answer while it is
@@ -205,19 +205,22 @@ The bundled index does not require an embedding API.
 
 The normal workflow is:
 
-1. Put every course PDF directly in one folder.
-2. Select that folder under **Settings | Tools | Jentor → Course library**.
-3. Jentor parses it in the background and displays indexing status.
-4. Add, replace or delete a PDF; the folder watcher rebuilds the index.
-5. The old index remains active until the new index is complete and valid.
+1. Open the **Course materials** tab in the Jentor tool window.
+2. Use **Add PDFs**, drag PDFs into the table, or use **Add folder** for bulk
+   import. Files may come from unrelated directories.
+3. Each PDF is parsed independently and appears as queued, indexing, ready,
+   missing or failed.
+4. Replacing a source PDF updates only that catalog entry. Removing an entry from
+   Jentor never deletes the source PDF.
+5. A source path that moves becomes missing and can be rebound with **Locate**.
+6. Citation details show the original path and provide open-folder/copy-path
+   actions.
 
-The generated index and source fingerprint are cached under the IDE system
-directory. A 30-second sweep catches changes missed by the VFS watcher. Only
-top-level PDFs are scanned. Image-only PDFs require OCR before Jentor can read
-them.
+The catalog and aggregate index are cached under the IDE system directory.
+Image-only PDFs require OCR before Jentor can read them.
 
-The bundled Python-generated index remains a fallback when no managed folder is
-configured. The optional Python workflow is:
+The bundled Python-generated index remains a fallback when the managed catalog
+has no usable documents. The optional Python workflow is:
 
 ```powershell
 python tools\build_index.py `
@@ -309,8 +312,8 @@ Key packages:
 - Plugin installation and live model calls must be smoke-tested on a machine
   with IntelliJ IDEA installed and API access configured.
 - The bundled index was generated from the course PDF slides.
-- The managed library scans only the configured folder's top level and does not
-  perform OCR for scanned/image-only PDFs.
+- The managed library does not perform OCR for scanned/image-only PDFs.
+- If a source PDF is moved outside Jentor, it is marked missing until relocated.
 - The local vector is lexical. A real embedding endpoint can be added later
   without changing the citation contract.
 - Citation validation catches invalid document/page pairs, but it cannot prove

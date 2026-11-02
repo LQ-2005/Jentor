@@ -34,16 +34,19 @@ There are two compatible sources for the page-aware index:
 2. The optional Python script `tools/build_index.py`, retained for reproducible
    offline index generation and bundled fallback material.
 
-`CourseLibraryService` watches the configured PDF directory. PDF changes are
-debounced, and a 30-second fingerprint sweep covers events missed by the IDE VFS.
-`PdfCourseIndexBuilder` extracts both sorted/layout and default PDFBox text,
-chooses the more readable result, cleans footer page numbers, and chunks each
-page independently. `CourseLibraryStore` writes the complete index and its
-source fingerprint atomically under the IDE system directory.
+`CourseLibraryService` owns a catalog of independent PDF entries. Each entry may
+live in a different folder and stores its original path, content hash, size,
+modification time, page/chunk counts and indexing status. Exact source paths are
+watched through VFS, and a 30-second size/mtime sweep covers missed events.
+`PdfCourseIndexBuilder` parses one PDF at a time, extracts sorted/layout and
+default PDFBox text, chooses the more readable result, cleans footer page
+numbers, and chunks each page independently. `CourseLibraryStore` persists
+`catalog.json` and the aggregate `course-index.json` atomically.
 
-The previous index remains active until parsing, vector generation, serialization
-and fingerprint validation all succeed. If PDFs change during a build, the result
-is discarded and rebuilt instead of caching a mixed snapshot.
+The previous index remains active until parsing, vector generation and JSON
+serialization succeed. A failed or moved PDF is marked on its own row and does not
+break unrelated materials. Adding or replacing one PDF reuses the parsed chunks of
+unchanged documents and regenerates the global IDF/vector aggregate.
 
 - The Python path extracts page text with pypdf; the managed path uses PDFBox.
 - Two extraction modes are compared. The layout mode preserves code indentation
@@ -281,8 +284,11 @@ memory.
   until the user selects another snippet or clicks Clear.
 - `TaSettings` stores the endpoint and model in XML and the API key in
   `PasswordSafe`.
-- `CourseLibraryService`, `PdfCourseIndexBuilder`, `CourseIndexJsonCodec` and
-  `CourseLibraryStore` implement managed PDF import, validation and persistence.
+- `CourseLibraryService`, `CourseDocumentSource`, `PdfCourseIndexBuilder`,
+  `CourseIndexJsonCodec` and `CourseLibraryStore` implement the independent PDF
+  catalog, validation and persistence.
+- `CourseLibraryPanel` is the management tab for adding, refreshing, rebuilding,
+  removing, locating and opening course PDFs.
 - `CourseTaService` prefers the active managed index, then a manual import, then
   `/index/course-index.json`, and runs requests on the IntelliJ application
   executor.
@@ -303,7 +309,10 @@ memory.
   embedding endpoint without changing the chunk or citation contract.
 - Citation validation checks document and page validity, not semantic
   attribution.
-- Managed PDF parsing scans only the selected folder's top level.
+- The catalog may reference PDFs from unrelated folders; importing a folder is
+  only a bulk convenience.
 - Scanned/image-only PDFs are not OCRed.
-- Encrypted or unsupported PDFs produce an indexing error while the previous
-  valid index remains active.
+- Encrypted or unsupported PDFs produce an error on their own catalog row while
+  other valid materials remain active.
+- Moving a source PDF marks it missing; the old chunks remain until the user
+  relocates or removes the catalog entry.

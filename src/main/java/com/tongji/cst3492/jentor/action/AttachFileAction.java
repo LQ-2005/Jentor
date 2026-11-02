@@ -16,6 +16,7 @@ import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.service.CourseTaService;
 import com.tongji.cst3492.jentor.ui.ChatPanel;
+import com.tongji.cst3492.jentor.ui.JentorToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -79,8 +80,9 @@ public final class AttachFileAction extends AnAction {
         }
         window.show();
         Content content = window.getContentManager().getContent(0);
-        if (content != null && content.getComponent() instanceof ChatPanel panel) {
-            panel.addFiles(snapshots);
+        if (content != null && content.getComponent() instanceof JentorToolWindowPanel panel) {
+            ChatPanel chatPanel = panel.chatPanel();
+            chatPanel.addFiles(snapshots);
             if (service != null) {
                 service.consumePendingFiles();
             }

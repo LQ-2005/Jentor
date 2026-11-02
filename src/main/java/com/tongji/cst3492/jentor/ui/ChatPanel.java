@@ -19,6 +19,7 @@ import com.tongji.cst3492.jentor.llm.StreamSink;
 import com.tongji.cst3492.jentor.context.CodeFilePolicy;
 import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
+import com.tongji.cst3492.jentor.model.CourseDocumentSource;
 import com.tongji.cst3492.jentor.model.SourceReference;
 import com.tongji.cst3492.jentor.service.ChatRequest;
 import com.tongji.cst3492.jentor.service.CourseLibraryService;
@@ -48,6 +49,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -63,6 +65,7 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.nio.file.Path;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 
@@ -261,8 +264,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 moreMenu.show(moreButton, 0, moreButton.getHeight()));
 
         courseMaterialsItem.addActionListener(event -> showIndexInfo());
-        manageCourseMaterialsItem.addActionListener(event ->
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
+        manageCourseMaterialsItem.addActionListener(event -> showCourseLibrary());
         refreshCourseMaterialsItem.addActionListener(event -> refreshCourseMaterials());
         importIndexItem.addActionListener(event -> loadIndex());
         clearConversationItem.addActionListener(event -> clearChat());
@@ -719,11 +721,43 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private void showSource(SourceReference source) {
+        CourseDocumentSource managed = service.getCourseLibraryService()
+                .sourceForDocumentId(source.docId());
+        String location = managed == null ? "" : managed.path();
         String text = "File: " + source.fileName() + "\n"
-                + "PDF page: " + source.locator() + "\n\n"
+                + "PDF page: " + source.locator() + "\n"
+                + (location.isBlank() ? "" : "Original location: " + location + "\n")
+                + "\n"
                 + "Excerpt:\n" + source.excerpt();
-        Messages.showInfoMessage(project, text,
-                I18n.t(currentLanguage(), "sourcesCount"));
+        if (location.isBlank()) {
+            Messages.showInfoMessage(project, text,
+                    I18n.t(currentLanguage(), "sourcesCount"));
+            return;
+        }
+        int choice = Messages.showDialog(project, text,
+                I18n.t(currentLanguage(), "sourcesCount"),
+                new String[]{"Open PDF", "Show folder", "Copy path", "Close"},
+                0, Messages.getInformationIcon());
+        Path path = Path.of(location);
+        if (choice == 0) {
+            openPath(path);
+        } else if (choice == 1 && path.getParent() != null) {
+            openPath(path.getParent());
+        } else if (choice == 2) {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(location), null);
+        }
+    }
+
+    private void openPath(Path path) {
+        try {
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(path.toFile());
+            }
+        } catch (Exception error) {
+            Messages.showErrorDialog(project, error.getMessage(),
+                    I18n.t(currentLanguage(), "courseMaterials"));
+        }
     }
 
     private void appendMessage(String role, String text, boolean warning, boolean userMessage) {
@@ -966,10 +1000,11 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     .equals(progressLabel.getText())) {
                 progressLabel.setText("");
             }
-            if (library.isConfigured()) {
-                if (!library.getError().isBlank()) {
-                    statusLabel.setText(I18n.t(language, "indexError") + library.getError());
-                } else if (library.isIndexing()) {
+            if (!library.getSources().isEmpty()) {
+                if (!library.getLastError().isBlank()) {
+                    statusLabel.setText(I18n.t(language, "indexError")
+                            + library.getLastError());
+                } else if (library.isBusy()) {
                     statusLabel.setText(I18n.t(language, "courseMaterialsIndexing"));
                 } else if (library.getIndex() != null) {
                     statusLabel.setText(I18n.t(language, "courseMaterialsReady")
@@ -1025,13 +1060,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         StringBuilder message = new StringBuilder();
         message.append(service.getIndexSummary()).append("\n\n");
         CourseLibraryService library = service.getCourseLibraryService();
-        if (library.isConfigured()) {
-            message.append(I18n.t(language, "courseLibraryPath"))
-                    .append(library.getDirectory())
-                    .append('\n');
-            if (!library.getError().isBlank()) {
-                message.append(I18n.t(language, "indexError"))
-                        .append(library.getError())
+        if (!library.getSources().isEmpty()) {
+            for (var source : library.getSources()) {
+                message.append("- ")
+                        .append(source.displayName())
+                        .append(" [")
+                        .append(source.status())
+                        .append("]\n  ")
+                        .append(source.path())
                         .append('\n');
             }
             message.append('\n');
@@ -1052,6 +1088,15 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         service.refreshCourseLibrary();
         progressLabel.setText(I18n.t(currentLanguage(), "courseMaterialsIndexing"));
         updateStatus();
+    }
+
+    private void showCourseLibrary() {
+        JentorToolWindowPanel root =
+                (JentorToolWindowPanel) SwingUtilities.getAncestorOfClass(
+                        JentorToolWindowPanel.class, this);
+        if (root != null) {
+            root.showCourseLibrary();
+        }
     }
 
     private void loadIndex() {

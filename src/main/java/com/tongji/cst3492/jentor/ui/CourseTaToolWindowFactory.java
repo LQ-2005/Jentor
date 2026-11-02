@@ -24,7 +24,7 @@ public final class CourseTaToolWindowFactory implements ToolWindowFactory {
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         try {
-            ChatPanel panel = new ChatPanel(project);
+            JentorToolWindowPanel panel = new JentorToolWindowPanel(project);
             Content content = ContentFactory.getInstance().createContent(panel, "", false);
             content.setDisposer(panel);
             toolWindow.getContentManager().addContent(content);

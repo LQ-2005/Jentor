@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.1.0.zip
+build/distributions/jentor-1.2.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,24 +147,32 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.1.0.zip`；
+3. 选择 `build/distributions/jentor-1.2.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
 ## 6. 配置模型
 
-先配置课程资料库：
+管理课程资料库：
 
-1. `Settings → Tools → Jentor`；
-2. 在 “Course library / 课程资料库” 中选择保存全部课程 PDF 的文件夹；
-3. `Apply`。
+1. 打开 `View → Tool Windows → Jentor`；
+2. 切换到“课程资料 / Course materials”页；
+3. 点击“添加 PDF”，选择任意位置的一份或多份 PDF；
+4. 也可以拖放 PDF，或使用“添加文件夹”批量导入；
+5. 每份资料会显示排队、索引中、已就绪、文件缺失或失败状态。
 
-Jentor 会立即在后台用内置 PDFBox 解析全部 PDF。之后往该目录新增、替换或删除 PDF，插件会自动重建索引。解析期间顶部状态显示“正在解析并索引课程 PDF”，完成后显示课件数量。解析失败时旧索引继续可用。
+课程资料不要求位于同一个文件夹，也不会被复制、移动或删除。Jentor 只记录原始路径并在后台解析。
+
+常用操作：
+
+- “重新索引”重新解析选中文档；
+- “刷新”检查全部资料的文件变化；
+- “移除资料”只从 Jentor 移除，不删除原始 PDF；
+- “定位缺失文件”可以把移动后的 PDF 重新关联到目录项；
+- “打开 PDF”“打开所在文件夹”“复制路径”用于定位课程资料。
 
 课程资料库有以下限制：
 
-- 只扫描所选目录第一层；
-- 不扫描子目录；
 - 不执行 OCR，纯图片 PDF 无法提取文字；
 - 索引缓存位于 IntelliJ 系统目录；
 - 不需要 Python 或 `pypdf`。
@@ -230,7 +238,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.1.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.2.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -240,6 +248,8 @@ python tools/build_index.py `
 - [ ] 输入框右键有剪切/复制/粘贴/全选
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制
-- [ ] 设置课程 PDF 目录后，状态从“正在索引”变为就绪
-- [ ] 向目录新增 PDF 后，课件数量自动增加
+- [ ] 从不同目录添加 PDF 后，各资料独立显示并进入就绪状态
+- [ ] 新增 PDF 后，课件数量自动增加
 - [ ] 无效或损坏 PDF 不会清空上一份可用索引
+- [ ] 移除资料不会删除原始 PDF
+- [ ] 移动原 PDF 后显示“文件缺失”，并能通过“定位”恢复

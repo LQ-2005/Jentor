@@ -12,6 +12,7 @@ import com.intellij.ui.content.Content;
 import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.service.CourseTaService;
 import com.tongji.cst3492.jentor.ui.ChatPanel;
+import com.tongji.cst3492.jentor.ui.JentorToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
 public final class AskSelectionAction extends AnAction {
@@ -50,8 +51,9 @@ public final class AskSelectionAction extends AnAction {
         window.show();
 
         Content content = window.getContentManager().getContent(0);
-        if (content != null && content.getComponent() instanceof ChatPanel panel) {
-            panel.setPendingContext(context);
+        if (content != null && content.getComponent() instanceof JentorToolWindowPanel panel) {
+            ChatPanel chatPanel = panel.chatPanel();
+            chatPanel.setPendingContext(context);
             if (service != null) {
                 service.consumePendingContext();
             }

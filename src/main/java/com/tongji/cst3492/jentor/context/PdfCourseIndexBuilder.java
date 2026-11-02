@@ -53,42 +53,77 @@ public final class PdfCourseIndexBuilder {
             throw new IOException("No PDF files found in " + materialsDirectory);
         }
 
-        List<DocumentMeta> documents = new ArrayList<>();
-        List<PendingChunk> pending = new ArrayList<>();
+        List<ParsedDocument> parsed = new ArrayList<>();
         Set<String> documentIds = new HashSet<>();
 
         for (Path pdf : pdfs) {
-            List<PageText> pages = extractPages(pdf);
             String title = stripExtension(pdf.getFileName().toString());
             String documentId = slugify(title);
             if (!documentIds.add(documentId)) {
                 throw new IOException("Duplicate course document id: " + documentId);
             }
-            documents.add(new DocumentMeta(documentId, title, pdf.getFileName().toString(),
-                    pages.size()));
-            for (PageText page : pages) {
-                String pageTitle = pageTitle(page.text());
-                List<String> pieces = splitPage(page.text());
-                for (int chunkIndex = 0; chunkIndex < pieces.size(); chunkIndex++) {
-                    pending.add(new PendingChunk(
-                            documentId,
-                            title,
-                            pdf.getFileName().toString(),
-                            page.number(),
-                            chunkIndex,
-                            pageTitle,
-                            pieces.get(chunkIndex)));
-                }
+            parsed.add(parse(pdf, documentId));
+        }
+        return aggregate(parsed);
+    }
+
+    public static ParsedDocument parse(Path pdf) throws IOException {
+        String title = stripExtension(pdf.getFileName().toString());
+        return parse(pdf, slugify(title));
+    }
+
+    public static ParsedDocument parse(Path pdf, String documentId) throws IOException {
+        if (pdf == null || !Files.isRegularFile(pdf)) {
+            throw new IOException("Course PDF does not exist: " + pdf);
+        }
+        List<PageText> pages = extractPages(pdf);
+        String title = stripExtension(pdf.getFileName().toString());
+        DocumentMeta document = new DocumentMeta(documentId, title,
+                pdf.getFileName().toString(), pages.size());
+        List<RawChunk> chunks = new ArrayList<>();
+        for (PageText page : pages) {
+            String pageTitle = pageTitle(page.text());
+            List<String> pieces = splitPage(page.text());
+            for (int chunkIndex = 0; chunkIndex < pieces.size(); chunkIndex++) {
+                chunks.add(new RawChunk(
+                        documentId,
+                        title,
+                        pdf.getFileName().toString(),
+                        page.number(),
+                        chunkIndex,
+                        pageTitle,
+                        pieces.get(chunkIndex)));
             }
         }
+        if (chunks.isEmpty()) {
+            throw new IOException("No extractable text found in " + pdf.getFileName());
+        }
+        return new ParsedDocument(document, chunks);
+    }
 
+    public static CourseIndex aggregate(List<ParsedDocument> parsedDocuments) {
+        if (parsedDocuments == null || parsedDocuments.isEmpty()) {
+            throw new IllegalArgumentException("At least one parsed course document is required");
+        }
+        List<DocumentMeta> documents = new ArrayList<>();
+        List<RawChunk> pending = new ArrayList<>();
+        Set<String> documentIds = new HashSet<>();
+        for (ParsedDocument parsed : parsedDocuments) {
+            if (!documentIds.add(parsed.document().getId())) {
+                throw new IllegalArgumentException(
+                        "Duplicate course document id: " + parsed.document().getId());
+            }
+            documents.add(parsed.document());
+            pending.addAll(parsed.chunks());
+        }
         if (pending.isEmpty()) {
-            throw new IOException("The selected PDFs did not contain extractable text");
+            throw new IllegalArgumentException(
+                    "The selected PDFs did not contain extractable text");
         }
 
         Map<String, Integer> documentFrequency = new HashMap<>();
         Map<String, List<String>> tokensByChunk = new LinkedHashMap<>();
-        for (PendingChunk chunk : pending) {
+        for (RawChunk chunk : pending) {
             List<String> tokens = Tokens.tokenize(chunk.indexedText());
             tokensByChunk.put(chunk.key(), tokens);
             for (String token : new HashSet<>(tokens)) {
@@ -105,14 +140,14 @@ public final class PdfCourseIndexBuilder {
         float defaultIdf = round6(Math.log(chunkCount + 1.0) + 1.0);
 
         List<Chunk> chunks = new ArrayList<>(chunkCount);
-        for (PendingChunk pendingChunk : pending) {
+        for (RawChunk pendingChunk : pending) {
             float[] vector = LocalEmbedder.embed(
                     pendingChunk.indexedText(), DIMENSIONS, idf, defaultIdf);
             roundVector(vector);
             chunks.add(new Chunk(
                     pendingChunk.key(),
-                    pendingChunk.documentId(),
-                    pendingChunk.documentTitle(),
+                    pendingChunk.docId(),
+                    pendingChunk.docTitle(),
                     pendingChunk.fileName(),
                     "PAGE",
                     pendingChunk.page(),
@@ -132,6 +167,29 @@ public final class PdfCourseIndexBuilder {
                 idf,
                 documents,
                 chunks);
+    }
+
+    public static List<ParsedDocument> fromIndex(CourseIndex index) {
+        Map<String, List<RawChunk>> chunksByDocument = new LinkedHashMap<>();
+        for (Chunk chunk : index.getChunks()) {
+            chunksByDocument.computeIfAbsent(chunk.getDocId(), ignored -> new ArrayList<>())
+                    .add(new RawChunk(
+                            chunk.getDocId(),
+                            chunk.getDocTitle(),
+                            chunk.getFileName(),
+                            chunk.getPageStart(),
+                            chunk.getChunkIndex(),
+                            chunk.getTitle(),
+                            chunk.getText()));
+        }
+        List<ParsedDocument> result = new ArrayList<>();
+        for (DocumentMeta document : index.getDocuments()) {
+            List<RawChunk> chunks = chunksByDocument.get(document.getId());
+            if (chunks != null && !chunks.isEmpty()) {
+                result.add(new ParsedDocument(document, chunks));
+            }
+        }
+        return result;
     }
 
     public static List<Path> listPdfFiles(Path directory) throws IOException {
@@ -313,16 +371,22 @@ public final class PdfCourseIndexBuilder {
     private record PageText(int number, String text) {
     }
 
-    private record PendingChunk(
-            String documentId,
-            String documentTitle,
+    public record ParsedDocument(DocumentMeta document, List<RawChunk> chunks) {
+        public ParsedDocument {
+            chunks = chunks == null ? List.of() : List.copyOf(chunks);
+        }
+    }
+
+    public record RawChunk(
+            String docId,
+            String docTitle,
             String fileName,
             int page,
             int chunkIndex,
             String title,
             String text) {
         private String key() {
-            return documentId + "-p" + page + "-c" + chunkIndex;
+            return docId + "-p" + page + "-c" + chunkIndex;
         }
 
         private String indexedText() {

@@ -1,16 +1,16 @@
 <idea-plugin>
     <id>com.tongji.cst3492.jentor</id>
     <name>Jentor</name>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <vendor>Tongji University</vendor>
 
     <description>
         Jentor is a course-specific teaching assistant for CST3492 Java Enterprise
         Application Development. Enterprise Java, made clear. It retrieves relevant
         lecture slides, answers questions with document and page citations, and can
-        automatically index a watched course PDF library, and attach selected editor
-        code or workspace source files to the conversation. Files are read once,
-        when attached, and never written.
+        independently manage a catalog of course PDFs from any folder, automatically
+        index them, and attach selected editor code or workspace source files to the
+        conversation. Source files are never modified or deleted.
     </description>
 
     <idea-version since-build="252" until-build="262.*"/>

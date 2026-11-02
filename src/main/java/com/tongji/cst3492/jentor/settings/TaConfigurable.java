@@ -5,20 +5,12 @@ import com.intellij.openapi.options.Configurable;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
-import com.tongji.cst3492.jentor.service.CourseLibraryService;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;
-import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
-import javax.swing.JPanel;
 import javax.swing.JPasswordField;
-import java.awt.BorderLayout;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
 
 public final class TaConfigurable implements Configurable {
     private final TaSettings settings = TaSettings.getInstance();
@@ -37,9 +29,6 @@ public final class TaConfigurable implements Configurable {
             new JCheckBox("Use offline mock model (no API key) / 使用离线 Mock 模型（无需 API Key）");
     private final JCheckBox streamOutput =
             new JCheckBox("Stream the answer while it is generated / 流式输出回答（边生成边显示）");
-    private final JBTextField courseMaterialsPath = new JBTextField();
-    private final JButton chooseCourseMaterials = new JButton("Browse... / 浏览...");
-    private JPanel courseMaterialsPanel;
 
     @Override
     public String getDisplayName() {
@@ -53,11 +42,6 @@ public final class TaConfigurable implements Configurable {
 
     @Override
     public @Nullable JComponent createComponent() {
-        courseMaterialsPanel = new JPanel(new BorderLayout(6, 0));
-        courseMaterialsPanel.add(courseMaterialsPath, BorderLayout.CENTER);
-        courseMaterialsPanel.add(chooseCourseMaterials, BorderLayout.EAST);
-        chooseCourseMaterials.addActionListener(event -> chooseCourseMaterialsDirectory());
-
         return FormBuilder.createFormBuilder()
                 .addComponent(new JBLabel("<html><b>Connection / 连接</b></html>"))
                 .addLabeledComponent(new JBLabel("Base URL / 接口地址:"), baseUrl, 1, false)
@@ -68,16 +52,14 @@ public final class TaConfigurable implements Configurable {
                 .addLabeledComponent(new JBLabel(
                         "Max output tokens / 最大输出 token 数:"), maxTokens, 1, false)
                 .addComponent(new JBLabel("<html><b>Course library / 课程资料库</b></html>"))
-                .addLabeledComponent(new JBLabel(
-                        "Course PDF folder / 课程 PDF 目录:"), courseMaterialsPanel, 1, false)
                 .addComponent(new JBLabel(
                         "<html><body style='width:520px'>"
-                                + "Jentor watches this folder and rebuilds the complete PDF index "
-                                + "when files are added, replaced or removed. Only PDF files in "
-                                + "the top-level folder are scanned. OCR is not performed."
+                                + "Course PDFs are managed in the Jentor tool window's "
+                                + "<b>Course materials</b> tab. PDFs may come from any folder and "
+                                + "can be added, relocated, rebuilt or removed independently."
                                 + "<br/><br/>"
-                                + "Jentor 会自动监听此目录；新增、替换或删除 PDF 后会重新生成完整索引。"
-                                + "只扫描目录第一层的 PDF，不执行图片文字 OCR。"
+                                + "课程 PDF 在 Jentor 工具窗口的“课程资料”页中管理。资料可以来自任意目录，"
+                                + "并能独立添加、定位、重建或移除。"
                                 + "</body></html>"))
                 .addComponent(new JBLabel("<html><b>Advanced / 高级设置</b></html>"))
                 .addLabeledComponent(new JBLabel("Top-K chunks / 检索片段数:"), topK, 1, false)
@@ -116,7 +98,6 @@ public final class TaConfigurable implements Configurable {
                 || language.getSelectedIndex() != ("zh".equals(state.language) ? 0 : 1)
                 || useMockModel.isSelected() != state.useMockModel
                 || streamOutput.isSelected() != state.streamOutput
-                || !courseMaterialsPath.getText().trim().equals(state.courseMaterialsPath)
                 || !new String(apiKey.getPassword()).equals(nullToEmpty(settings.getApiKey()));
     }
 
@@ -133,22 +114,7 @@ public final class TaConfigurable implements Configurable {
         state.language = language.getSelectedIndex() == 0 ? "zh" : "en";
         state.useMockModel = useMockModel.isSelected();
         state.streamOutput = streamOutput.isSelected();
-        String materialsPath = courseMaterialsPath.getText().trim();
-        if (!materialsPath.isBlank()) {
-            try {
-                if (!Files.isDirectory(Path.of(materialsPath))) {
-                    throw new ConfigurationException(
-                            "Course PDF folder does not exist: " + materialsPath);
-                }
-            } catch (InvalidPathException error) {
-                throw new ConfigurationException(
-                        "Invalid course PDF folder: " + materialsPath
-                                + " (" + error.getMessage() + ")");
-            }
-        }
-        state.courseMaterialsPath = materialsPath;
         settings.setApiKey(new String(apiKey.getPassword()).trim());
-        CourseLibraryService.getInstance().configure(state.courseMaterialsPath);
     }
 
     @Override
@@ -165,7 +131,6 @@ public final class TaConfigurable implements Configurable {
         language.setSelectedIndex("zh".equals(state.language) ? 0 : 1);
         useMockModel.setSelected(state.useMockModel);
         streamOutput.setSelected(state.streamOutput);
-        courseMaterialsPath.setText(state.courseMaterialsPath);
     }
 
     @Override
@@ -213,22 +178,4 @@ public final class TaConfigurable implements Configurable {
         return value == null ? "" : value;
     }
 
-    private void chooseCourseMaterialsDirectory() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select course PDF folder / 选择课程 PDF 目录");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (!courseMaterialsPath.getText().isBlank()) {
-            try {
-                Path current = Path.of(courseMaterialsPath.getText().trim());
-                if (Files.isDirectory(current)) {
-                    chooser.setCurrentDirectory(current.toFile());
-                }
-            } catch (InvalidPathException ignored) {
-                // Leave the chooser at its default location.
-            }
-        }
-        if (chooser.showOpenDialog(courseMaterialsPanel) == JFileChooser.APPROVE_OPTION) {
-            courseMaterialsPath.setText(chooser.getSelectedFile().getAbsolutePath());
-        }
-    }
 }

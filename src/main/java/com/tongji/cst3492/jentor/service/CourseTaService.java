@@ -103,7 +103,7 @@ public final class CourseTaService {
             realAnswerService = null;
             mockAnswerService = null;
         }
-        libraryService().refreshAsync();
+        libraryService().refreshAll();
     }
 
     public CourseLibraryService getCourseLibraryService() {

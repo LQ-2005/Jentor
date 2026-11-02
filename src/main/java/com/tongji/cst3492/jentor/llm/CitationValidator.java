@@ -97,6 +97,7 @@ public final class CitationValidator {
             sources.putIfAbsent(key, new SourceReference(
                     block.chunk().getFileName(),
                     block.chunk().getDocTitle(),
+                block.chunk().getDocId(),
                     citation.startPage(),
                     citation.endPage(),
                     locator,
