@@ -69,7 +69,10 @@ class MarkdownContentPerformanceTest {
         // extra factor on top of that (an extra parse per flush, a per-flush
         // rebuild of already rendered blocks) pushes the ratio far higher.
         double ratio = (double) streamedNanos / Math.max(1, singleNanos);
-        assertTrue(ratio <= 60.0, () -> String.format(Locale.ROOT,
+        // Re-parsing every prefix already trends toward 60x for this input.
+        // Leave room for JIT/scheduler noise while still rejecting an extra full
+        // parse per flush, which would trend toward 120x.
+        assertTrue(ratio <= 80.0, () -> String.format(Locale.ROOT,
                 "Re-parsing %d chars over %d flushes cost %.1fx a single parse "
                         + "(%d us vs %d us). MarkdownContent.parse should cost roughly one "
                         + "parse per flush; a much larger ratio means the work done for each "

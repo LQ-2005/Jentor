@@ -106,6 +106,34 @@ class RetrieverTest {
     }
 
     @Test
+    void chineseGeneralKnowledgePathAlwaysUsesTheChineseFootnotes() throws IOException {
+        LlmConfig config = new LlmConfig("mock", "mock", "mock", 0.0, 256);
+        Answer answer = new AnswerService(retriever, new MockChatClient())
+                .answer(
+                        "今天上海的天气怎么样？",
+                        CodeContext.empty(), config, 5, 0.45, 6000, "zh", List.of(),
+                        new CancellationToken(), null);
+        assertFalse(answer.grounded());
+        assertEquals(CitationStatus.NOT_APPLICABLE, answer.citationStatus());
+        assertEquals(PromptBuilder.FALLBACK_SENTENCE_ZH, answer.disclosure());
+        assertFalse(answer.text().contains(PromptBuilder.FALLBACK_SENTENCE_ZH));
+    }
+
+    @Test
+    void chineseModeLocalizesAnEnglishFallbackFromTheModel() throws IOException {
+        LlmConfig config = new LlmConfig("mock", "mock", "mock", 0.0, 256);
+        Answer answer = new AnswerService(retriever, (ignoredConfig, messages, token) ->
+                PromptBuilder.FALLBACK_SENTENCE)
+                .answer(
+                        "What is an array?",
+                        CodeContext.empty(), config, 5, 0.45, 6000, "zh", List.of(),
+                        new CancellationToken(), null);
+        assertEquals(CitationStatus.NOT_APPLICABLE, answer.citationStatus());
+        assertEquals(PromptBuilder.FALLBACK_SENTENCE_ZH, answer.disclosure());
+        assertFalse(answer.text().contains(PromptBuilder.FALLBACK_SENTENCE));
+    }
+
+    @Test
     void citationValidationUsesActualContextAndDedupesSources() {
         Chunk chunk = new Chunk(
                 "c1",

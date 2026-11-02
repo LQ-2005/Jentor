@@ -112,10 +112,8 @@ public final class AnswerService {
             String fallback = "zh".equals(language)
                     ? PromptBuilder.FALLBACK_SENTENCE_ZH
                     : PromptBuilder.FALLBACK_SENTENCE;
-            if (!text.contains(fallback)) {
-                text = fallback + "\n\n" + text;
-            }
-            text = stripDisclosure(text, fallback);
+            text = stripDisclosure(text, PromptBuilder.FALLBACK_SENTENCE);
+            text = stripDisclosure(text, PromptBuilder.FALLBACK_SENTENCE_ZH);
             return new Answer(
                     text,
                     List.of(),
@@ -185,12 +183,15 @@ public final class AnswerService {
                 status == CitationStatus.NOT_APPLICABLE
                         ? List.of()
                         : citationValidator.citedSources(text, ragContext.blocks());
-        String disclosure = "";
         String fallback = "zh".equals(language)
                 ? PromptBuilder.FALLBACK_SENTENCE_ZH
                 : PromptBuilder.FALLBACK_SENTENCE;
-        if (text.contains(fallback)) {
-            text = stripDisclosure(text, fallback);
+        String disclosure = "";
+        boolean hasFallback = text.contains(PromptBuilder.FALLBACK_SENTENCE)
+                || text.contains(PromptBuilder.FALLBACK_SENTENCE_ZH);
+        if (status == CitationStatus.NOT_APPLICABLE || hasFallback) {
+            text = stripDisclosure(text, PromptBuilder.FALLBACK_SENTENCE);
+            text = stripDisclosure(text, PromptBuilder.FALLBACK_SENTENCE_ZH);
             disclosure = fallback;
         }
         return new Answer(

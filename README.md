@@ -44,8 +44,8 @@ This is the F0 baseline required for every group.
   the retry instructions tell the model to move course-supported statements and
   their citations into Course basis instead of deleting the citations.
 - Sources contain only citations actually used and validated in the answer,
-  deduplicated by document/page. Unused retrieval candidates appear only in a
-  collapsible debug section.
+  deduplicated by document/page. Unused retrieval candidates are not exposed in
+  the answer card.
 - Clicking a source opens an in-IDE preview. PDF citations render the exact cited
   page without an external reader; image sources show the original image; all
   sources retain the sent excerpt, original path and open-folder actions.
@@ -56,9 +56,10 @@ This is the F0 baseline required for every group.
 - Mixed course/general answers also move the fallback sentence to the gray
   footnote rather than leaving it inside the General supplement body.
 - A bilingual (中文 / English) IntelliJ tool window with left/right chat bubbles,
-  an index summary, language selection, and send/settings controls plus a direct
-  **Clear conversation** button. Course material actions live only in the
-  **Course materials** tab, not in the chat header. The
+  language selection, settings, and a direct **Clear conversation** button.
+  Course material actions live only in the **Course materials** tab, not in the
+  chat header. A compact `API / 离线` selector and an icon-only send/stop control
+  sit at the bottom-right of the rounded composer. The
   answer language follows the selector. English mode uses the original fallback
   sentence; Chinese mode uses the equivalent Chinese sentence.
 - Multi-turn conversation memory: the most recent user/assistant turns are sent
@@ -77,17 +78,16 @@ This is the F0 baseline required for every group.
   nested lists, blockquotes and inline formatting. Raw HTML is escaped, unsafe
   link schemes are stripped and images are replaced by their alt text, so model
   output cannot inject markup or load remote content.
-- A compact top bar with course-material status, a persistent Mock badge, a
-  code-attachment bar, collapsible sources, copy-answer, and a "new reply" jump
-  button.
+- A compact header with generation progress, a code-attachment bar, collapsible
+  sources, and a "new reply" jump button. The chat header no longer duplicates
+  course-material counts or Mock mode status.
 - Fenced code blocks become themed rounded cards with a language label, a copy
   button, their own scrollbars and a 360 px height cap. While an answer streams
   the card is painted as plain text; the real editor component is created only
   for the final render.
 - Chat prose and the input use the IDE UI font. Rendered answers can be selected
   with the mouse and copied with the platform shortcut; the right-click menu adds
-  cut/copy/paste/select-all plus **Copy all**, and the answer toolbar button
-  copies the message as plain text rather than Markdown source.
+  cut/copy/paste/select-all plus **Copy all**.
 - Message bodies and footnotes reflow when the tool window is resized; the
   transcript has no horizontal scrollbar, and top controls wrap onto a second
   row when space is tight. User messages are right-aligned bubbles capped at 75%
@@ -167,7 +167,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.4.zip
+build\distributions\jentor-1.3.5.zip
 ```
 
 Install it into IntelliJ:

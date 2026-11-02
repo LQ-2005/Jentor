@@ -33,8 +33,6 @@ public final class I18n {
             case "pages" -> zh ? " 页" : " pages";
             case "sources" -> zh ? "来源：" : "Sources: ";
             case "sourcesCount" -> zh ? "引用来源" : "Sources";
-            case "debugCandidates" -> zh ? "检索候选（调试）" : "Retrieval candidates (debug)";
-            case "copyAnswer" -> zh ? "复制回答" : "Copy answer";
             case "view" -> zh ? "查看" : "View";
             case "remove" -> zh ? "移除" : "Remove";
             case "attachmentTitle" -> zh ? "代码附件" : "Code attachment";
@@ -58,9 +56,14 @@ public final class I18n {
             case "footnotePrefix" -> zh ? "注：" : "Note: ";
             case "attachedFiles" -> zh ? "个文件" : "files";
             case "askInWorkspace" -> zh ? "在本工作区中询问" : "Ask in this workspace";
-            case "courseMaterialsReady" -> zh ? "课程资料就绪 · " : "Course materials ready · ";
-            case "documents" -> zh ? " 份课件" : " documents";
-            case "mockBadge" -> zh ? "离线演示 / Mock" : "Mock mode";
+            case "apiMode" -> "API";
+            case "offlineMode" -> zh ? "离线" : "Offline";
+            case "apiModeHint" -> zh
+                    ? "使用设置中配置的在线 API 模型"
+                    : "Use the configured online API model";
+            case "offlineModeHint" -> zh
+                    ? "使用离线演示模型，不发送网络请求"
+                    : "Use the offline demo model without network requests";
             case "courseMaterials" -> zh ? "课程资料" : "Course materials";
             case "courseMaterialsIndexing" -> zh
                     ? "正在解析并索引课程 PDF…"

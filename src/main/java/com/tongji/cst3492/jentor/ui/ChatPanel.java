@@ -5,6 +5,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPanel;
@@ -22,7 +23,6 @@ import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.CourseDocumentSource;
 import com.tongji.cst3492.jentor.model.SourceReference;
 import com.tongji.cst3492.jentor.service.ChatRequest;
-import com.tongji.cst3492.jentor.service.CourseLibraryService;
 import com.tongji.cst3492.jentor.service.CourseTaService;
 import com.tongji.cst3492.jentor.service.WorkspaceIndexService;
 import com.tongji.cst3492.jentor.settings.TaConfigurable;
@@ -54,8 +54,6 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
@@ -86,21 +84,20 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JPanel transcriptPanel = new JPanel();
     private final JBScrollPane transcriptScroll = new JBScrollPane(transcriptPanel);
     private final JBTextArea input = new JBTextArea();
-    private final JButton sendButton = new JButton();
+    private final JButton sendButton = new ComposerSendButton();
     private final JButton settingsButton = new JButton();
     private final JButton clearConversationButton = new JButton();
     private final JButton newReplyButton = new JButton();
-    private final JBLabel statusLabel = new JBLabel();
     private final JBLabel progressLabel = new JBLabel();
-    private final JBLabel mockBadge = new JBLabel();
     private final JCheckBox workspaceBox = new JCheckBox();
     private final JComboBox<String> languageBox =
             new JComboBox<>(new String[]{"中文", "English"});
+    private final JComboBox<String> modeBox = new JComboBox<>();
     private final JPanel attachmentBar = new JPanel(new BorderLayout(6, 0));
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
     private final JButton removeAttachmentButton = new JButton();
-    private final Timer mockTimer;
+    private final Timer modeTimer;
     private final Timer reflowTimer;
     private final Timer streamTimer;
 
@@ -115,6 +112,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private AssistantBubble streamCard;
     private boolean busy;
     private int requestGeneration;
+    private boolean syncingModeBox;
 
     public ChatPanel(Project project) {
         super(new BorderLayout(0, 8));
@@ -139,13 +137,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
         appendWelcome();
         updateLanguageUi();
-        updateStatus();
-        updateMockBadge();
-        mockTimer = new Timer(2000, event -> {
-            updateMockBadge();
-            updateStatus();
-        });
-        mockTimer.start();
+        modeTimer = new Timer(2000, event -> updateModeSelector());
+        modeTimer.start();
         reflowTimer = new Timer(150, event -> reflowMessages());
         reflowTimer.setRepeats(false);
         streamTimer = new Timer(STREAM_FLUSH_MS, event -> flushStream());
@@ -211,13 +204,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel labels = new JPanel();
         labels.setLayout(new BoxLayout(labels, BoxLayout.Y_AXIS));
         labels.setOpaque(false);
-        statusLabel.setForeground(JBColor.GRAY);
         progressLabel.setForeground(JBColor.GRAY);
-        mockBadge.setForeground(JBColor.GRAY);
-        mockBadge.setFont(mockBadge.getFont().deriveFont(Font.BOLD, 11f));
-        mockBadge.setVisible(false);
-        labels.add(statusLabel);
-        labels.add(mockBadge);
+        progressLabel.setVisible(false);
         labels.add(progressLabel);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
@@ -337,6 +325,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 send();
             }
         });
+        sendButton.setFocusPainted(false);
+        sendButton.setContentAreaFilled(false);
+        sendButton.setBorder(JBUI.Borders.empty(5));
+        sendButton.setPreferredSize(JBUI.size(30));
         input.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent event) {
@@ -357,10 +349,39 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             }
         });
 
-        JPanel inputPanel = new JPanel(new BorderLayout(6, 0));
-        inputPanel.setOpaque(false);
-        inputPanel.add(new JBScrollPane(input), BorderLayout.CENTER);
-        inputPanel.add(sendButton, BorderLayout.EAST);
+        modeBox.setFont(modeBox.getFont().deriveFont(11f));
+        modeBox.setMaximumRowCount(2);
+        modeBox.setPreferredSize(new Dimension(104, 24));
+        modeBox.putClientProperty("JComponent.sizeVariant", "small");
+        modeBox.addActionListener(event -> {
+            if (syncingModeBox || modeBox.getSelectedIndex() < 0) {
+                return;
+            }
+            TaSettings.State state = TaSettings.getInstance().getState();
+            boolean mock = modeBox.getSelectedIndex() == 1;
+            if (state.useMockModel == mock) {
+                return;
+            }
+            state.useMockModel = mock;
+            updateModeTooltip();
+            input.requestFocusInWindow();
+        });
+        updateModeSelector();
+
+        JPanel composerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        composerActions.setOpaque(false);
+        composerActions.add(modeBox);
+        composerActions.add(sendButton);
+
+        ComposerPanel inputPanel = new ComposerPanel();
+        JBScrollPane inputScroll = new JBScrollPane(input);
+        inputScroll.setBorder(JBUI.Borders.empty());
+        inputScroll.setOpaque(false);
+        inputScroll.getViewport().setOpaque(false);
+        inputScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        input.setOpaque(false);
+        inputPanel.add(inputScroll, BorderLayout.CENTER);
+        inputPanel.add(composerActions, BorderLayout.SOUTH);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 4));
         bottom.setOpaque(false);
@@ -395,7 +416,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         busy = true;
         int generation = ++requestGeneration;
         updateSendButton();
-        progressLabel.setText(I18n.t(currentLanguage(), "thinking"));
+        setProgressText(I18n.t(currentLanguage(), "thinking"));
         streamState = new StreamState(generation);
         streamCard = null;
         streamedText.setLength(0);
@@ -406,7 +427,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             request = service.ask(question, codeContext, historySnapshot, stage ->
                     ApplicationManager.getApplication().invokeLater(() -> {
                         if (generation == requestGeneration && busy) {
-                            progressLabel.setText(stage);
+                            setProgressText(stage);
                         }
                     }), createSink(generation), includeWorkspace);
         } catch (RuntimeException error) {
@@ -414,7 +435,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             streamState = null;
             busy = false;
             input.setText(question);
-            progressLabel.setText("");
+            setProgressText("");
             updateSendButton();
             appendError(friendlyError(error), currentLanguage(), question);
             return;
@@ -429,7 +450,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     }
                     currentRequest = null;
                     busy = false;
-                    progressLabel.setText("");
+                    setProgressText("");
                     flushStream();
                     streamTimer.stop();
                     streamState = null;
@@ -460,13 +481,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         streamState = null;
         streamedText.setLength(0);
         busy = false;
-        progressLabel.setText(I18n.t(currentLanguage(), "stopped"));
+        setProgressText(I18n.t(currentLanguage(), "stopped"));
         updateSendButton();
     }
 
     private void updateSendButton() {
         String language = currentLanguage();
-        sendButton.setText(I18n.t(language, busy ? "stop" : "send"));
+        String action = I18n.t(language, busy ? "stop" : "send");
+        sendButton.setIcon(busy ? AllIcons.Actions.Suspend : AllIcons.Actions.Upload);
+        sendButton.setText("");
+        sendButton.setToolTipText(action);
+        sendButton.getAccessibleContext().setAccessibleName(action);
         sendButton.setEnabled(busy || !input.getText().trim().isEmpty());
     }
 
@@ -515,13 +540,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             meta.add(status);
         }
 
-        JButton copy = new JButton(I18n.t(currentLanguage(), "copyAnswer"));
-        copy.setFont(copy.getFont().deriveFont(11f));
-        copy.addActionListener(event -> Toolkit.getDefaultToolkit()
-                .getSystemClipboard()
-                .setContents(new StringSelection(MarkdownText.toPlainText(answer.text())), null));
-        meta.add(copy);
-
         JPanel sourcesPanel = new JPanel();
         sourcesPanel.setLayout(new BoxLayout(sourcesPanel, BoxLayout.Y_AXIS));
         sourcesPanel.setOpaque(false);
@@ -547,33 +565,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             meta.add(toggle);
         }
 
-        JPanel debugPanel = new JPanel();
-        debugPanel.setLayout(new BoxLayout(debugPanel, BoxLayout.Y_AXIS));
-        debugPanel.setOpaque(false);
-        debugPanel.setAlignmentX(LEFT_ALIGNMENT);
-        debugPanel.setVisible(false);
-        for (var candidate : answer.debugCandidates()) {
-            JBLabel label = new JBLabel(candidate.getChunk().getFileName()
-                    + " " + candidate.getChunk().locator()
-                    + "  score=" + String.format(Locale.ROOT, "%.3f", candidate.getFusedScore()));
-            label.setFont(label.getFont().deriveFont(10f));
-            label.setForeground(JBColor.GRAY);
-            debugPanel.add(label);
+        if (meta.getComponentCount() > 0) {
+            card.add(meta);
         }
-        if (!answer.debugCandidates().isEmpty()) {
-            JButton debugToggle = new JButton(I18n.t(currentLanguage(), "debugCandidates"));
-            debugToggle.setFont(debugToggle.getFont().deriveFont(11f));
-            debugToggle.addActionListener(event -> {
-                debugPanel.setVisible(!debugPanel.isVisible());
-                card.revalidate();
-                card.repaint();
-            });
-            meta.add(debugToggle);
-        }
-
-        card.add(meta);
         card.add(sourcesPanel);
-        card.add(debugPanel);
         if (!answer.disclosure().isBlank()) {
             card.add(createFootnote(answer.disclosure(), width));
         }
@@ -651,7 +646,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             streamCard.body.setPreviewText(streamedText.toString());
             streamCard.card.revalidate();
             streamCard.card.repaint();
-            progressLabel.setText("");
+            setProgressText("");
         }
         if (pinned) {
             scrollToBottom();
@@ -925,7 +920,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingCodeContext = null;
         pendingFiles.clear();
         attachmentBar.setVisible(false);
-        progressLabel.setText("");
+        setProgressText("");
         transcriptPanel.removeAll();
         appendWelcome();
         updateSendButton();
@@ -933,58 +928,55 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         transcriptPanel.repaint();
     }
 
-    private void updateStatus() {
+    private void updateModeSelector() {
+        String language = currentLanguage();
+        String apiLabel = I18n.t(language, "apiMode");
+        String offlineLabel = I18n.t(language, "offlineMode");
+        boolean mock = TaSettings.getInstance().getState().useMockModel;
+        syncingModeBox = true;
         try {
-            int count = service.getDocuments().size();
-            CourseLibraryService library = service.getCourseLibraryService();
-            String language = currentLanguage();
-            if (!busy && I18n.t(language, "courseMaterialsIndexing")
-                    .equals(progressLabel.getText())) {
-                progressLabel.setText("");
+            if (modeBox.getItemCount() != 2
+                    || !apiLabel.equals(modeBox.getItemAt(0))
+                    || !offlineLabel.equals(modeBox.getItemAt(1))) {
+                modeBox.removeAllItems();
+                modeBox.addItem(apiLabel);
+                modeBox.addItem(offlineLabel);
             }
-            if (!library.getSources().isEmpty()) {
-                if (!library.getLastError().isBlank()) {
-                    statusLabel.setText(I18n.t(language, "indexError")
-                            + library.getLastError());
-                } else if (library.isBusy()) {
-                    statusLabel.setText(I18n.t(language, "courseMaterialsIndexing"));
-                } else if (library.getIndex() != null) {
-                    statusLabel.setText(I18n.t(language, "courseMaterialsReady")
-                            + count + I18n.t(language, "documents"));
-                } else {
-                    statusLabel.setText(I18n.t(language, "courseMaterialsWaiting"));
-                }
-            } else {
-                statusLabel.setText(I18n.t(language, "courseMaterialsReady")
-                        + count + I18n.t(language, "documents"));
-            }
-        } catch (Throwable error) {
-            statusLabel.setText(I18n.t(currentLanguage(), "indexError")
-                    + friendlyError(error));
+            modeBox.setSelectedIndex(mock ? 1 : 0);
+            updateModeTooltip();
+        } finally {
+            syncingModeBox = false;
         }
     }
 
-    private void updateMockBadge() {
+    private void updateModeTooltip() {
+        String language = currentLanguage();
         boolean mock = TaSettings.getInstance().getState().useMockModel;
-        mockBadge.setVisible(mock);
-        mockBadge.setText(I18n.t(currentLanguage(), "mockBadge"));
+        modeBox.setToolTipText(I18n.t(language, mock ? "offlineModeHint" : "apiModeHint"));
+    }
+
+    private void setProgressText(String text) {
+        progressLabel.setText(text == null ? "" : text);
+        progressLabel.setVisible(!progressLabel.getText().isBlank());
+        if (progressLabel.getParent() != null) {
+            progressLabel.getParent().revalidate();
+        }
     }
 
     private void updateLanguageUi() {
         String language = currentLanguage();
         settingsButton.setText(I18n.t(language, "settings"));
-        sendButton.setText(I18n.t(language, busy ? "stop" : "send"));
         workspaceBox.setText(I18n.t(language, "askInWorkspace"));
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
         clearConversationButton.setText(I18n.t(language, "clearConversation"));
+        updateModeSelector();
+        updateSendButton();
         refreshAttachmentBar();
         if (!busy) {
-            progressLabel.setText("");
+            setProgressText("");
         }
-        updateStatus();
-        updateMockBadge();
         if (transcriptPanel.getComponentCount() <= 1) {
             transcriptPanel.removeAll();
             messageBodies.clear();
@@ -1022,7 +1014,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
-        mockTimer.stop();
+        modeTimer.stop();
         reflowTimer.stop();
         streamTimer.stop();
     }
@@ -1093,6 +1085,68 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(fill);
             g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            g2.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class ComposerPanel extends JPanel {
+        private ComposerPanel() {
+            super(new BorderLayout(0, 2));
+            setOpaque(false);
+            setBorder(JBUI.Borders.empty(4, 6));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            Color fill = UIManager.getColor("TextField.background");
+            if (fill == null) {
+                fill = UIManager.getColor("Panel.background");
+            }
+            if (fill != null) {
+                g2.setColor(fill);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+            }
+            g2.setColor(JBColor.border());
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+            g2.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class ComposerSendButton extends JButton {
+        private ComposerSendButton() {
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setRolloverEnabled(true);
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            Color fill = UIManager.getColor(
+                    isEnabled() ? "Button.default.background" : "Button.background");
+            if (fill == null) {
+                fill = UIManager.getColor("Panel.background");
+            }
+            if (fill != null) {
+                if (isEnabled() && getModel().isRollover()) {
+                    fill = fill.darker();
+                }
+                g2.setColor(fill);
+                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+            }
+            g2.setColor(JBColor.border());
+            g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
             g2.dispose();
             super.paintComponent(graphics);
         }

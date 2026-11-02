@@ -132,10 +132,10 @@ mechanical document/page validation as semantic correctness.
 
 Only citations that appear in the answer and pass validation become source
 entries; they are deduplicated by document and page range. Unused retrieval
-candidates are shown only in a collapsible debug section. Clicking a source
-opens the document name, PDF page, and the actual excerpt sent in this request.
-The course index uses PDF page numbers, so citations use `p.`/`pp.` rather than
-mixing `Slide`.
+candidates stay internal and are not exposed in the answer card. Clicking a
+source opens the document name, PDF page, and the actual excerpt sent in this
+request. The course index uses PDF page numbers, so citations use `p.`/`pp.`
+rather than mixing `Slide`.
 
 ## Streaming
 
@@ -270,17 +270,18 @@ memory.
 ## IDE integration
 
 - `CourseTaToolWindowFactory` creates the right-side **Jentor** tool window.
-- `ChatPanel` owns the transcript, input, send/settings controls, the direct
-  Clear conversation action, a compact index status, and the source list.
+- `ChatPanel` owns the transcript, rounded composer, settings controls, the
+  direct Clear conversation action, and the source list.
 - `MessageBody` renders paragraphs, lists, inline code, and fenced code blocks.
   Code blocks use a read-only `EditorTextField` when a file type is available,
   with a language label and copy button; prose is escaped and rendered without
   executing model HTML.
 - The top bar exposes language, settings, and Clear conversation without mixing
   in course-library actions. Course management, refresh, and manual JSON index
-  import belong to the Course materials tab. A timer keeps the Mock badge in
-  sync with settings. The attachment bar shows the selected line range and
-  provides View/Remove actions.
+  import belong to the Course materials tab. The composer footer exposes an
+  `API / 离线` selector plus an icon-only send/stop button. A timer keeps the
+  selector in sync with settings. The attachment bar shows the selected line
+  range and provides View/Remove actions.
 - `AskSelectionAction` is registered in `EditorPopupMenu`. It attaches the
   selected code and opens the tool window.
 - `SelectionContextFactory` captures the selected text, up to 20 lines before
