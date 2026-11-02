@@ -67,9 +67,10 @@ This is the F0 baseline required for every group.
   sentence; Chinese mode uses the equivalent Chinese sentence.
 - Persistent, project-local conversations: completed question/answer turns are
   saved under `.idea/jentor/conversations`, and the last active conversation is
-  restored when the tool window is opened again. The history drawer supports
-  search, open, rename and delete. The most recent turns are still sent to the
-  LLM for multi-turn follow-ups.
+  restored when the tool window is opened again. The full-height history drawer
+  shows title-only rows at a larger font, with a rounded hover background. It
+  supports search, open, rename and delete. The most recent turns are still sent
+  to the LLM for multi-turn follow-ups.
 - Generation can be stopped. The request carries a cancellation token; the task
   and, where supported, the HTTP request are cancelled. Stale responses cannot
   update the UI or conversation memory.
@@ -172,7 +173,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.4.0.zip
+build\distributions\jentor-1.4.1.zip
 ```
 
 Install it into IntelliJ:

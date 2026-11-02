@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.4.0.zip
+build/distributions/jentor-1.4.1.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.4.0.zip`；
+3. 选择 `build/distributions/jentor-1.4.1.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -250,7 +250,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.4.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.4.1 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -259,6 +259,8 @@ python tools/build_index.py `
 - [ ] 中文/English 切换正常
 - [ ] “新对话”会创建独立会话，旧会话继续保留在历史中
 - [ ] 历史列表可以搜索、打开、重命名和删除
+- [ ] 历史抽屉从标签页下方开始占满左侧整列，聊天标题仍在右侧聊天区顶部
+- [ ] 历史项只显示标题，鼠标悬停才出现深色圆角背景
 - [ ] 重启 IDE 后能恢复上次打开的已完成对话
 - [ ] 历史保存在 `.idea/jentor/conversations`，不会出现在 Git 状态中
 - [ ] 聊天页顶部不再显示课程资料数量或独立 Mock 徽标

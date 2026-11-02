@@ -276,8 +276,10 @@ history.
 ## IDE integration
 
 - `CourseTaToolWindowFactory` creates the right-side **Jentor** tool window.
-- `ChatPanel` owns the transcript, rounded composer, New chat action, history
-  drawer, settings controls and source list.
+- `ChatPanel` owns the transcript, rounded composer, New chat action, full-height
+  history drawer, settings controls and source list. The drawer sits at the left
+  edge below the tool-window tabs; the conversation title and controls remain in
+  the right-hand chat column.
 - `MessageBody` renders paragraphs, lists, inline code, and fenced code blocks.
   Code blocks use a read-only `EditorTextField` when a file type is available,
   with a language label and copy button; prose is escaped and rendered without

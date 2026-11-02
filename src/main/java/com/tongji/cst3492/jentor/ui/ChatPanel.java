@@ -176,14 +176,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         transcriptScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         transcriptScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        add(createTopPanel(), BorderLayout.NORTH);
+        JPanel chatColumn = new JPanel(new BorderLayout(0, 8));
+        chatColumn.setOpaque(false);
+        chatColumn.add(createTopPanel(), BorderLayout.NORTH);
+        chatColumn.add(createCenterPanel(), BorderLayout.CENTER);
+        chatColumn.add(createBottomPanel(), BorderLayout.SOUTH);
+
         JPanel workspace = new JPanel(new BorderLayout(6, 0));
         workspace.setOpaque(false);
         historyPanel.setVisible(false);
         workspace.add(historyPanel, BorderLayout.WEST);
-        workspace.add(createCenterPanel(), BorderLayout.CENTER);
+        workspace.add(chatColumn, BorderLayout.CENTER);
         add(workspace, BorderLayout.CENTER);
-        add(createBottomPanel(), BorderLayout.SOUTH);
 
         appendWelcome();
         updateLanguageUi();

@@ -16,6 +16,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
+import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
@@ -23,11 +24,11 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
+import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -42,11 +43,6 @@ final class ConversationHistoryPanel extends JPanel {
         void delete(ConversationSummary summary);
     }
 
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("MM-dd");
-
     private final Listener listener;
     private final DefaultListModel<ConversationSummary> model = new DefaultListModel<>();
     private final JBList<ConversationSummary> list = new JBList<>(model);
@@ -58,6 +54,7 @@ final class ConversationHistoryPanel extends JPanel {
     private List<ConversationSummary> allSummaries = List.of();
     private String activeId = "";
     private String language = "zh";
+    private int hoverIndex = -1;
 
     ConversationHistoryPanel(Listener listener) {
         super(new BorderLayout(0, 6));
@@ -76,12 +73,12 @@ final class ConversationHistoryPanel extends JPanel {
         add(header, BorderLayout.NORTH);
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setFixedCellHeight(54);
+        list.setFixedCellHeight(38);
         list.setCellRenderer(new HistoryCellRenderer());
         list.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent event) {
-                int index = list.locationToIndex(event.getPoint());
+                int index = indexAt(event.getPoint());
                 if (index >= 0) {
                     list.setSelectedIndex(index);
                 }
@@ -99,9 +96,29 @@ final class ConversationHistoryPanel extends JPanel {
 
             @Override
             public void mouseClicked(MouseEvent event) {
+                int index = indexAt(event.getPoint());
                 if (!event.isPopupTrigger() && event.getButton() == MouseEvent.BUTTON1
-                        && list.getSelectedValue() != null) {
-                    listener.open(list.getSelectedValue());
+                        && index >= 0) {
+                    list.setSelectedIndex(index);
+                    listener.open(model.get(index));
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent event) {
+                if (hoverIndex >= 0) {
+                    hoverIndex = -1;
+                    list.repaint();
+                }
+            }
+        });
+        list.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent event) {
+                int next = indexAt(event.getPoint());
+                if (next != hoverIndex) {
+                    hoverIndex = next;
+                    list.repaint();
                 }
             }
         });
@@ -170,6 +187,15 @@ final class ConversationHistoryPanel extends JPanel {
         contextMenu.show(list, event.getX(), event.getY());
     }
 
+    private int indexAt(Point point) {
+        int index = list.locationToIndex(point);
+        if (index < 0) {
+            return -1;
+        }
+        Rectangle bounds = list.getCellBounds(index, index);
+        return bounds != null && bounds.contains(point) ? index : -1;
+    }
+
     private void filter() {
         String query = search.getText() == null
                 ? "" : search.getText().trim().toLowerCase(Locale.ROOT);
@@ -201,34 +227,14 @@ final class ConversationHistoryPanel extends JPanel {
         list.clearSelection();
     }
 
-    private static String updatedLabel(long timestamp) {
-        Instant instant = Instant.ofEpochMilli(timestamp);
-        long age = System.currentTimeMillis() - timestamp;
-        DateTimeFormatter formatter = age < 24L * 60L * 60L * 1000L
-                ? TIME_FORMAT : DATE_FORMAT;
-        return formatter.format(instant.atZone(ZoneId.systemDefault()));
-    }
-
     private final class HistoryCellRenderer extends JPanel
             implements ListCellRenderer<ConversationSummary> {
         private final JBLabel title = new JBLabel();
-        private final JBLabel preview = new JBLabel();
-        private final JBLabel updated = new JBLabel();
 
         private HistoryCellRenderer() {
-            super(new BorderLayout(4, 1));
-            setBorder(JBUI.Borders.empty(5, 6));
-            title.setFont(title.getFont().deriveFont(Font.BOLD, 11f));
-            preview.setForeground(JBColor.GRAY);
-            preview.setFont(preview.getFont().deriveFont(10f));
-            updated.setForeground(JBColor.GRAY);
-            updated.setFont(updated.getFont().deriveFont(9f));
-            JPanel text = new JPanel(new BorderLayout(0, 1));
-            text.setOpaque(false);
-            text.add(title, BorderLayout.NORTH);
-            text.add(preview, BorderLayout.SOUTH);
-            add(text, BorderLayout.CENTER);
-            add(updated, BorderLayout.EAST);
+            super(new BorderLayout());
+            setBorder(JBUI.Borders.empty(7, 8));
+            add(title, BorderLayout.CENTER);
         }
 
         @Override
@@ -239,23 +245,28 @@ final class ConversationHistoryPanel extends JPanel {
                 boolean selected,
                 boolean hasFocus) {
             title.setText(value.title());
-            preview.setText(value.preview().isBlank()
-                    ? (value.messageCount() + ("en".equals(language)
-                    ? " messages" : " 条消息"))
-                    : value.preview());
-            updated.setText(ConversationHistoryPanel.updatedLabel(value.updatedAt()));
-            Color background = selected
-                    ? source.getSelectionBackground()
-                    : source.getBackground();
+            title.setFont(title.getFont().deriveFont(selected ? Font.BOLD : Font.PLAIN, 13f));
+            boolean hovered = index == hoverIndex;
+            Color background = source.getBackground();
+            Color foreground = source.getForeground();
+            if (hovered) {
+                background = hoverBackground();
+                foreground = source.getForeground();
+            }
             setBackground(background);
             setOpaque(true);
-            title.setForeground(selected
-                    ? source.getSelectionForeground() : source.getForeground());
-            preview.setForeground(selected
-                    ? source.getSelectionForeground() : JBColor.GRAY);
-            updated.setForeground(selected
-                    ? source.getSelectionForeground() : JBColor.GRAY);
+            title.setForeground(foreground);
             return this;
         }
+    }
+
+    private static Color hoverBackground() {
+        Color hover = UIManager.getColor("ActionButton.hoverBackground");
+        if (hover == null) {
+            hover = UIManager.getColor("Button.hoverBackground");
+        }
+        return hover == null
+                ? new JBColor(new Color(0xECEEF1), new Color(0x3C3F41))
+                : hover;
     }
 }
