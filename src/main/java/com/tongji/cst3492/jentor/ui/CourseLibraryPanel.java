@@ -13,11 +13,10 @@ import com.tongji.cst3492.jentor.service.CourseLibraryService;
 import com.tongji.cst3492.jentor.settings.TaSettings;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JPanel;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -29,6 +28,8 @@ import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,7 +42,6 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     private final CourseLibraryService service;
     private final LibraryTableModel model = new LibraryTableModel();
     private final JBTable table = new JBTable(model);
-    private final JTextArea details = new JTextArea();
     private final JBLabel status = new JBLabel();
     private final JButton addFiles = new JButton();
     private final JButton addFolder = new JButton();
@@ -69,7 +69,15 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setAutoCreateRowSorter(true);
-        table.getSelectionModel().addListSelectionListener(event -> updateDetails());
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                if (event.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(event)
+                        && table.getSelectedRow() >= 0) {
+                    openSelected(false);
+                }
+            }
+        });
         installDropHandler();
         refreshTimer = new Timer(1000, event -> refreshFromService());
         refreshTimer.start();
@@ -78,7 +86,8 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     }
 
     private JPanel createToolbar() {
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
         configure(addFiles, this::chooseFiles);
         configure(addFolder, this::chooseFolder);
         configure(refresh, () -> service.refreshAll());
@@ -88,30 +97,24 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         configure(openFolder, () -> openSelected(true));
         configure(locate, this::locateSelected);
         configure(copyPath, this::copySelectedPath);
-        toolbar.add(addFiles);
-        toolbar.add(addFolder);
-        toolbar.add(refresh);
-        toolbar.add(rebuild);
-        toolbar.add(remove);
-        toolbar.add(openPdf);
-        toolbar.add(openFolder);
-        toolbar.add(locate);
-        toolbar.add(copyPath);
+        JPanel primary = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        primary.add(addFiles);
+        primary.add(addFolder);
+        primary.add(refresh);
+        primary.add(rebuild);
+        JPanel secondary = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        secondary.add(remove);
+        secondary.add(openPdf);
+        secondary.add(openFolder);
+        secondary.add(locate);
+        secondary.add(copyPath);
+        toolbar.add(primary);
+        toolbar.add(secondary);
         return toolbar;
     }
 
-    private JSplitPane createCenter() {
-        details.setEditable(false);
-        details.setLineWrap(true);
-        details.setWrapStyleWord(true);
-        details.setOpaque(false);
-        details.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        JBScrollPane tableScroll = new JBScrollPane(table);
-        JBScrollPane detailsScroll = new JBScrollPane(details);
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScroll, detailsScroll);
-        split.setResizeWeight(0.72);
-        split.setDividerLocation(280);
-        return split;
+    private JBScrollPane createCenter() {
+        return new JBScrollPane(table);
     }
 
     private void chooseFiles() {
@@ -236,35 +239,6 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
             status.setText(service.getLastMessage());
             status.setForeground(JBColor.GRAY);
         }
-        updateDetails();
-    }
-
-    private void updateDetails() {
-        CourseDocumentSource source = selectedSource();
-        if (source == null) {
-            details.setText(text("选择一份课程资料以查看详细信息。",
-                    "Select a course material to inspect its details."));
-            return;
-        }
-        details.setText(
-                source.displayName() + "\n"
-                        + text("原始位置：", "Original location: ") + source.path() + "\n"
-                        + text("文件类型：", "File type: ") + source.fileType() + "\n"
-                        + text("状态：", "Status: ") + statusText(source.status()) + "\n"
-                        + text("定位单元：", "Locations: ") + source.pageCount()
-                        + "    Chunks: " + source.chunkCount() + "\n"
-                        + text("表格：", "Tables: ") + source.tableCount()
-                        + "    " + text("图片：", "Images: ") + source.imageCount()
-                        + "    OCR: " + (source.ocrUsed()
-                        ? text("已使用", "used") : text("未使用", "not used")) + "\n"
-                        + text("解析器：", "Parser: ") + source.parser() + "\n"
-                        + (source.error().isBlank() ? ""
-                        : text("错误：", "Error: ") + source.error() + "\n")
-                        + "\n" + text(
-                        "移除资料不会删除原始 PDF。缺失文件可以先用“定位”重新关联。",
-                        "Removing a material never deletes its source PDF. "
-                                + "Use Locate to rebind a missing file."));
-        details.setCaretPosition(0);
     }
 
     private void installDropHandler() {

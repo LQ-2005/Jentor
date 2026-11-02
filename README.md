@@ -20,6 +20,9 @@ This is the F0 baseline required for every group.
   PDF pages use bundled offline English + Simplified Chinese OCR. Each item
   records its original path, parser, location/chunk counts, tables, images, OCR
   status and errors.
+- The Course materials tab title follows the configured language, the table uses
+  the available tool-window height, and double-clicking a row opens its source
+  file directly.
 - BM25-first hybrid retrieval with a hashed TF-IDF vector as a tie-breaker.
 - Exact-title and phrase boosts so "what is X?" questions reach the slide that
   defines X instead of a longer overview slide.
@@ -159,7 +162,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.1.zip
+build\distributions\jentor-1.3.2.zip
 ```
 
 Install it into IntelliJ:
