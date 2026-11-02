@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.4.1.zip
+build/distributions/jentor-1.5.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.4.1.zip`；
+3. 选择 `build/distributions/jentor-1.5.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -250,7 +250,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.4.1 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.5.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -269,6 +269,7 @@ python tools/build_index.py `
 - [ ] 发送按钮使用单一向上箭头，生成期间显示停止图标
 - [ ] 回答卡片只保留引用来源按钮，不再显示复制回答和检索候选
 - [ ] 输入框右键有剪切/复制/粘贴/全选
+- [ ] 中文输入法仍在组合候选词时，按 Enter 不会误发送消息
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制
 - [ ] 从不同目录添加 PDF 后，各资料独立显示并进入就绪状态

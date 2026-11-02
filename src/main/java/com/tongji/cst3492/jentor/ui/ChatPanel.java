@@ -64,6 +64,10 @@ import java.awt.LayoutManager;
 import java.awt.RenderingHints;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.InputMethodEvent;
+import java.awt.event.InputMethodListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -134,6 +138,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private boolean busy;
     private int requestGeneration;
     private int historyLoadGeneration;
+    private boolean imeComposing;
     private volatile boolean disposed;
 
     public ChatPanel(Project project) {
@@ -377,6 +382,24 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 : new Font("SansSerif", Font.PLAIN, 13));
         input.setMargin(new Insets(4, 6, 4, 6));
         TextContextMenu.install(input);
+        input.addInputMethodListener(new InputMethodListener() {
+            @Override
+            public void inputMethodTextChanged(InputMethodEvent event) {
+                imeComposing = InputMethodComposition.hasUncommittedText(
+                        event.getText(), event.getCommittedCharacterCount());
+            }
+
+            @Override
+            public void caretPositionChanged(InputMethodEvent event) {
+                // Composition state is updated by inputMethodTextChanged.
+            }
+        });
+        input.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent event) {
+                imeComposing = false;
+            }
+        });
         input.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent event) {
@@ -387,7 +410,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         && !event.isShiftDown()
                         && !event.isControlDown()
                         && !event.isAltDown()
-                        && !event.isMetaDown()) {
+                        && !event.isMetaDown()
+                        && !imeComposing) {
                     event.consume();
                     if (!busy) {
                         send();

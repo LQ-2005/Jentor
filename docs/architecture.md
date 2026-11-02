@@ -292,6 +292,9 @@ history.
   selector paints a rounded hover background while the pointer is over it. A
   timer keeps it in sync with settings. The attachment bar shows the selected
   line range and provides View/Remove actions.
+- The composer listens to Swing `InputMethodEvent`s. While the current event
+  still contains uncommitted composition text, Enter is ignored for sending so
+  confirming a Chinese IME candidate cannot submit the message prematurely.
 - `AskSelectionAction` is registered in `EditorPopupMenu`. It attaches the
   selected code and opens the tool window.
 - `SelectionContextFactory` captures the selected text, up to 20 lines before

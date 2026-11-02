@@ -94,6 +94,9 @@ This is the F0 baseline required for every group.
 - Chat prose and the input use the IDE UI font. Rendered answers can be selected
   with the mouse and copied with the platform shortcut; the right-click menu adds
   cut/copy/paste/select-all plus **Copy all**.
+- The chat input keeps Enter as send and Shift+Enter as newline while tracking
+  Swing input-method composition events. Pressing Enter to confirm an IME
+  candidate does not send the message before the composition is committed.
 - Message bodies and footnotes reflow when the tool window is resized; the
   transcript has no horizontal scrollbar, and top controls wrap onto a second
   row when space is tight. User messages are right-aligned bubbles capped at 75%
@@ -173,7 +176,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.4.1.zip
+build\distributions\jentor-1.5.0.zip
 ```
 
 Install it into IntelliJ:
