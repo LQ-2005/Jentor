@@ -56,7 +56,9 @@ This is the F0 baseline required for every group.
 - Mixed course/general answers also move the fallback sentence to the gray
   footnote rather than leaving it inside the General supplement body.
 - A bilingual (中文 / English) IntelliJ tool window with left/right chat bubbles,
-  an index summary, language selection, and send/clear/settings controls. The
+  an index summary, language selection, and send/settings controls plus a direct
+  **Clear conversation** button. Course material actions live only in the
+  **Course materials** tab, not in the chat header. The
   answer language follows the selector. English mode uses the original fallback
   sentence; Chinese mode uses the equivalent Chinese sentence.
 - Multi-turn conversation memory: the most recent user/assistant turns are sent
@@ -75,9 +77,9 @@ This is the F0 baseline required for every group.
   nested lists, blockquotes and inline formatting. Raw HTML is escaped, unsafe
   link schemes are stripped and images are replaced by their alt text, so model
   output cannot inject markup or load remote content.
-- A compact top bar with course-material details, a more menu, a persistent Mock
-  badge, a code-attachment bar, collapsible sources, copy-answer, and a "new
-  reply" jump button.
+- A compact top bar with course-material status, a persistent Mock badge, a
+  code-attachment bar, collapsible sources, copy-answer, and a "new reply" jump
+  button.
 - Fenced code blocks become themed rounded cards with a language label, a copy
   button, their own scrollbars and a 360 px height cap. While an answer streams
   the card is painted as plain text; the real editor component is created only
@@ -165,7 +167,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.3.zip
+build\distributions\jentor-1.3.4.zip
 ```
 
 Install it into IntelliJ:

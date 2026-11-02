@@ -33,10 +33,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
-import javax.swing.JMenuItem;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
@@ -44,7 +41,6 @@ import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.BorderLayout;
@@ -65,7 +61,6 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.nio.file.Path;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 
@@ -93,7 +88,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JBTextArea input = new JBTextArea();
     private final JButton sendButton = new JButton();
     private final JButton settingsButton = new JButton();
-    private final JButton moreButton = new JButton("⋯");
+    private final JButton clearConversationButton = new JButton();
     private final JButton newReplyButton = new JButton();
     private final JBLabel statusLabel = new JBLabel();
     private final JBLabel progressLabel = new JBLabel();
@@ -105,12 +100,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
     private final JButton removeAttachmentButton = new JButton();
-    private final JPopupMenu moreMenu = new JPopupMenu();
-    private final JMenuItem courseMaterialsItem = new JMenuItem();
-    private final JMenuItem manageCourseMaterialsItem = new JMenuItem();
-    private final JMenuItem refreshCourseMaterialsItem = new JMenuItem();
-    private final JMenuItem importIndexItem = new JMenuItem();
-    private final JMenuItem clearConversationItem = new JMenuItem();
     private final Timer mockTimer;
     private final Timer reflowTimer;
     private final Timer streamTimer;
@@ -260,25 +249,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         });
         configureButton(settingsButton, event ->
                 ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
-        configureButton(moreButton, event ->
-                moreMenu.show(moreButton, 0, moreButton.getHeight()));
-
-        courseMaterialsItem.addActionListener(event -> showIndexInfo());
-        manageCourseMaterialsItem.addActionListener(event -> showCourseLibrary());
-        refreshCourseMaterialsItem.addActionListener(event -> refreshCourseMaterials());
-        importIndexItem.addActionListener(event -> loadIndex());
-        clearConversationItem.addActionListener(event -> clearChat());
-        moreMenu.add(courseMaterialsItem);
-        moreMenu.add(manageCourseMaterialsItem);
-        moreMenu.add(refreshCourseMaterialsItem);
-        moreMenu.add(importIndexItem);
-        moreMenu.addSeparator();
-        moreMenu.add(clearConversationItem);
+        configureButton(clearConversationButton, event -> clearChat());
 
         controls.add(workspaceBox);
         controls.add(languageBox);
         controls.add(settingsButton);
-        controls.add(moreButton);
+        controls.add(clearConversationButton);
 
         JPanel top = new JPanel(new BorderLayout(0, 4));
         top.setOpaque(false);
@@ -760,7 +736,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             action = () -> ShowSettingsUtil.getInstance()
                     .showSettingsDialog(project, TaConfigurable.class);
         } else if (index) {
-            action = this::loadIndex;
+            action = this::showCourseLibrary;
         } else {
             action = () -> {
                 input.setText(question);
@@ -1002,11 +978,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
-        courseMaterialsItem.setText(I18n.t(language, "courseMaterials"));
-        manageCourseMaterialsItem.setText(I18n.t(language, "manageCourseMaterials"));
-        refreshCourseMaterialsItem.setText(I18n.t(language, "refreshCourseMaterials"));
-        importIndexItem.setText(I18n.t(language, "importIndex"));
-        clearConversationItem.setText(I18n.t(language, "clearConversation"));
+        clearConversationButton.setText(I18n.t(language, "clearConversation"));
         refreshAttachmentBar();
         if (!busy) {
             progressLabel.setText("");
@@ -1021,67 +993,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
     }
 
-    private void showIndexInfo() {
-        String language = currentLanguage();
-        StringBuilder message = new StringBuilder();
-        message.append(service.getIndexSummary()).append("\n\n");
-        CourseLibraryService library = service.getCourseLibraryService();
-        if (!library.getSources().isEmpty()) {
-            for (var source : library.getSources()) {
-                message.append("- ")
-                        .append(source.displayName())
-                        .append(" [")
-                        .append(source.status())
-                        .append("]\n  ")
-                        .append(source.path())
-                        .append('\n');
-            }
-            message.append('\n');
-        }
-        for (var document : service.getDocuments()) {
-            message.append("- ")
-                    .append(document.getFileName())
-                    .append(" (")
-                    .append(document.getPageCount())
-                    .append(I18n.t(language, "pages"))
-                    .append(")\n");
-        }
-        Messages.showInfoMessage(project, message.toString(),
-                I18n.t(language, "courseMaterials"));
-    }
-
-    private void refreshCourseMaterials() {
-        service.refreshCourseLibrary();
-        progressLabel.setText(I18n.t(currentLanguage(), "courseMaterialsIndexing"));
-        updateStatus();
-    }
-
     private void showCourseLibrary() {
         JentorToolWindowPanel root =
                 (JentorToolWindowPanel) SwingUtilities.getAncestorOfClass(
                         JentorToolWindowPanel.class, this);
         if (root != null) {
             root.showCourseLibrary();
-        }
-    }
-
-    private void loadIndex() {
-        String language = currentLanguage();
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle(I18n.t(language, "importIndex"));
-        chooser.setFileFilter(new FileNameExtensionFilter("Course index (JSON)", "json"));
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
-        try {
-            service.loadIndex(chooser.getSelectedFile().toPath());
-            updateStatus();
-            appendMessage("assistant",
-                    I18n.t(language, "loadedIndex") + service.getIndexSummary(),
-                    false, false);
-        } catch (Exception error) {
-            Messages.showErrorDialog(project, friendlyError(error),
-                    I18n.t(language, "cannotLoadIndex"));
         }
     }
 

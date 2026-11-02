@@ -10,6 +10,7 @@ import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.JBUI;
 import com.tongji.cst3492.jentor.model.CourseDocumentSource;
 import com.tongji.cst3492.jentor.service.CourseLibraryService;
+import com.tongji.cst3492.jentor.service.CourseTaService;
 import com.tongji.cst3492.jentor.settings.TaSettings;
 
 import javax.swing.BorderFactory;
@@ -42,6 +43,7 @@ import java.util.Objects;
 public final class CourseLibraryPanel extends JPanel implements Disposable {
     private final Project project;
     private final CourseLibraryService service;
+    private final CourseTaService taService;
     private final LibraryTableModel model = new LibraryTableModel();
     private final JBTable table = new JBTable(model);
     private final JBLabel status = new JBLabel();
@@ -56,6 +58,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     private final JMenuItem openFolder = new JMenuItem();
     private final JMenuItem locate = new JMenuItem();
     private final JMenuItem copyPath = new JMenuItem();
+    private final JMenuItem importIndex = new JMenuItem();
     private final Timer refreshTimer;
     private String language;
 
@@ -63,6 +66,9 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         super(new BorderLayout(0, 6));
         this.project = project;
         this.service = CourseLibraryService.getInstance();
+        CourseTaService resolvedTaService = project.getService(CourseTaService.class);
+        this.taService = resolvedTaService == null
+                ? new CourseTaService(project) : resolvedTaService;
         this.language = TaSettings.getInstance().getState().language;
         service.ensureStarted();
         setBorder(JBUI.Borders.empty(8));
@@ -101,6 +107,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         configure(openFolder, () -> openSelected(true));
         configure(locate, this::locateSelected);
         configure(copyPath, this::copySelectedPath);
+        configure(importIndex, this::importCourseIndex);
         configure(more, () -> moreMenu.show(more, 0, more.getHeight()));
         moreMenu.add(rebuild);
         moreMenu.add(remove);
@@ -108,6 +115,8 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         moreMenu.add(openFolder);
         moreMenu.add(locate);
         moreMenu.add(copyPath);
+        moreMenu.addSeparator();
+        moreMenu.add(importIndex);
         toolbar.add(addFiles);
         toolbar.add(addFolder);
         toolbar.add(refresh);
@@ -207,6 +216,24 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         }
     }
 
+    private void importCourseIndex() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(text("导入课程索引", "Import course index"));
+        chooser.setFileFilter(new FileNameExtensionFilter("Course index (JSON)", "json"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            taService.loadIndex(chooser.getSelectedFile().toPath());
+            status.setForeground(JBColor.GRAY);
+            status.setText(text("已加载课程索引：", "Loaded course index: ")
+                    + taService.getIndexSummary());
+        } catch (Exception error) {
+            Messages.showErrorDialog(project, error.getMessage(),
+                    text("无法加载课程索引", "Cannot load course index"));
+        }
+    }
+
     private CourseDocumentSource selectedSource() {
         int row = table.getSelectedRow();
         return row < 0 ? null : model.sourceAt(table.convertRowIndexToModel(row));
@@ -278,6 +305,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         openFolder.setText(text("打开所在文件夹", "Show folder"));
         locate.setText(text("定位缺失文件", "Locate"));
         copyPath.setText(text("复制路径", "Copy path"));
+        importIndex.setText(text("导入课程索引", "Import course index"));
     }
 
     private String statusText(String value) {

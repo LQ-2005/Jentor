@@ -270,14 +270,15 @@ memory.
 ## IDE integration
 
 - `CourseTaToolWindowFactory` creates the right-side **Jentor** tool window.
-- `ChatPanel` owns the transcript, input, send/clear/settings controls, index
-  summary, and source list.
+- `ChatPanel` owns the transcript, input, send/settings controls, the direct
+  Clear conversation action, a compact index status, and the source list.
 - `MessageBody` renders paragraphs, lists, inline code, and fenced code blocks.
   Code blocks use a read-only `EditorTextField` when a file type is available,
   with a language label and copy button; prose is escaped and rendered without
   executing model HTML.
-- The top bar exposes language, settings, and a more menu for course materials,
-  index import, and clearing the conversation. A timer keeps the Mock badge in
+- The top bar exposes language, settings, and Clear conversation without mixing
+  in course-library actions. Course management, refresh, and manual JSON index
+  import belong to the Course materials tab. A timer keeps the Mock badge in
   sync with settings. The attachment bar shows the selected line range and
   provides View/Remove actions.
 - `AskSelectionAction` is registered in `EditorPopupMenu`. It attaches the

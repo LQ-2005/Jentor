@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.3.3.zip
+build/distributions/jentor-1.3.4.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.3.3.zip`；
+3. 选择 `build/distributions/jentor-1.3.4.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -172,6 +172,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 - “移除资料”只从 Jentor 移除，不删除原始 PDF；
 - “定位缺失文件”可以把移动后的 PDF 重新关联到目录项；
 - “打开 PDF”“打开所在文件夹”“复制路径”用于定位课程资料。
+- 课程资料页右上角“⋯”中的“导入课程索引”用于手动加载已有的 JSON 索引；日常导入课程文件不需要使用它。
 
 课程资料库有以下限制：
 
@@ -207,7 +208,7 @@ python tools/build_index.py `
   --output "src\main\resources\index\course-index.json"
 ```
 
-然后重新构建插件，或在工具窗口的“课程资料 → 导入课程索引”中选择新 JSON。
+然后重新构建插件，或在工具窗口的“课程资料 → ⋯ → 导入课程索引”中选择新 JSON。
 
 ## 8. 常见问题
 
@@ -241,13 +242,14 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.3.3 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.3.4 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
 - [ ] 课程外问题出现灰色“注：本回答基于通用知识……”注脚
 - [ ] 引用来源可展开并查看原文摘录
 - [ ] 中文/English 切换正常
+- [ ] 聊天页只显示独立的“清空会话”按钮，不再出现课程资料菜单
 - [ ] 输入框右键有剪切/复制/粘贴/全选
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制

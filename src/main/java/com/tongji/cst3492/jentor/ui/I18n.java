@@ -62,12 +62,6 @@ public final class I18n {
             case "documents" -> zh ? " 份课件" : " documents";
             case "mockBadge" -> zh ? "离线演示 / Mock" : "Mock mode";
             case "courseMaterials" -> zh ? "课程资料" : "Course materials";
-            case "manageCourseMaterials" -> zh
-                    ? "管理课程资料库…"
-                    : "Manage course library...";
-            case "refreshCourseMaterials" -> zh
-                    ? "刷新课程资料库"
-                    : "Refresh course library";
             case "courseMaterialsIndexing" -> zh
                     ? "正在解析并索引课程 PDF…"
                     : "Parsing and indexing course PDFs...";
