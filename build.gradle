@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.tongji.cst3492.jentor'
-version = '1.0.0'
+version = '1.1.0'
 
 // The compiler toolchain must be able to read the IntelliJ jars it compiles
 // against. IntelliJ 2025.2-2026.1 ship Java 21 class files, 2026.2 ships Java 25
@@ -38,13 +38,7 @@ repositories {
 }
 
 dependencies {
-    implementation files(
-        'lib/jackson-databind-2.19.2.jar',
-        'lib/jackson-core-2.19.2.jar',
-        'lib/jackson-annotations-2.19.2.jar',
-        'lib/commonmark-0.30.0.jar',
-        'lib/commonmark-ext-gfm-tables-0.30.0.jar'
-    )
+    implementation fileTree(dir: 'lib', include: '*.jar')
 
     // Compile against the IDE that is already installed on this machine.
     // These jars are not packaged into the plugin.
@@ -93,6 +87,38 @@ tasks.register('runRetrievalHarness', JavaExec) {
             'src/main/resources'
     )
     mainClass = 'com.tongji.cst3492.jentor.tools.RetrievalHarness'
+}
+
+tasks.register('compilePdfIndexHarness', JavaCompile) {
+    dependsOn tasks.named('classes')
+    group = 'verification'
+    description = 'Compiles the in-plugin PDF indexer CLI harness.'
+    source = files('tools/PdfIndexHarness.java')
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('pdf-index-harness')
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.register('runPdfIndexHarness', JavaExec) {
+    dependsOn tasks.named('compilePdfIndexHarness')
+    group = 'verification'
+    description = 'Runs the in-plugin PDF indexer; pass -Pmaterials=<directory>.'
+    classpath = files(
+            layout.buildDirectory.dir('pdf-index-harness'),
+            sourceSets.main.output,
+            sourceSets.main.runtimeClasspath
+    )
+    mainClass = 'com.tongji.cst3492.jentor.tools.PdfIndexHarness'
+    def materials = providers.gradleProperty('materials').orNull
+    if (materials != null) {
+        def output = providers.gradleProperty('output').orNull
+        if (output != null) {
+            args materials, output
+        } else {
+            args materials
+        }
+    }
 }
 
 tasks.register('buildPlugin', Zip) {

@@ -8,6 +8,7 @@ work/
 __pycache__/
 *.pyc
 local.properties
+materials/
 *.log
 hs_err_pid*
 replay_pid*

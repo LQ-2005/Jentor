@@ -25,6 +25,14 @@ public final class LocalEmbedder {
     }
 
     public float[] embed(String text) {
+        return embed(text, dimensions, idf, defaultIdf);
+    }
+
+    public static float[] embed(
+            String text,
+            int dimensions,
+            Map<String, Float> idf,
+            float defaultIdf) {
         List<String> tokens = Tokens.tokenize(text);
         Map<String, Integer> counts = new HashMap<>();
         for (String token : tokens) {
@@ -35,7 +43,7 @@ public final class LocalEmbedder {
         for (Map.Entry<String, Integer> entry : counts.entrySet()) {
             String token = entry.getKey();
             int count = entry.getValue();
-            Hash hash = hash(token);
+            Hash hash = hash(token, dimensions);
             double weight = (1.0 + Math.log(count)) * idf.getOrDefault(token, defaultIdf);
             vector[hash.index()] += (float) (hash.sign() * weight);
         }
@@ -62,7 +70,7 @@ public final class LocalEmbedder {
         return score;
     }
 
-    private Hash hash(String token) {
+    private static Hash hash(String token, int dimensions) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(token.getBytes(StandardCharsets.UTF_8));

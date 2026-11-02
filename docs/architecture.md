@@ -28,9 +28,24 @@ Question + selected code
 
 ## Indexing
 
-The indexer is `tools/build_index.py`.
+There are two compatible sources for the page-aware index:
 
-- PDF text is extracted page by page with pypdf.
+1. The primary managed course library, built inside the plugin with PDFBox.
+2. The optional Python script `tools/build_index.py`, retained for reproducible
+   offline index generation and bundled fallback material.
+
+`CourseLibraryService` watches the configured PDF directory. PDF changes are
+debounced, and a 30-second fingerprint sweep covers events missed by the IDE VFS.
+`PdfCourseIndexBuilder` extracts both sorted/layout and default PDFBox text,
+chooses the more readable result, cleans footer page numbers, and chunks each
+page independently. `CourseLibraryStore` writes the complete index and its
+source fingerprint atomically under the IDE system directory.
+
+The previous index remains active until parsing, vector generation, serialization
+and fingerprint validation all succeed. If PDFs change during a build, the result
+is discarded and rebuilt instead of caching a mixed snapshot.
+
+- The Python path extracts page text with pypdf; the managed path uses PDFBox.
 - Two extraction modes are compared. The layout mode preserves code indentation
   but animated slides can produce text such as `Pa s s i n g`. If the layout
   result has a high ratio of single-letter tokens, the default extraction is used
@@ -41,7 +56,10 @@ The indexer is `tools/build_index.py`.
 - Every chunk stores `docId`, `docTitle`, `fileName`, `pageStart`, `pageEnd`,
   `locatorType`, `chunkIndex`, `title`, `text`, and a 512-dimensional vector.
 
-The generated index currently contains 9 documents, 199 pages, and 214 chunks.
+The bundled Python index currently contains 9 documents, 199 pages, and 214
+chunks. PDFBox extraction is not byte-for-byte identical to pypdf; the same
+lecture set currently produces 203 chunks in the Java builder. Document names,
+PDF page numbers and the citation contract are unchanged.
 
 ## Local embedding
 
@@ -83,7 +101,7 @@ demo risk low.
 The system prompt requires:
 
 - answers grounded in the supplied excerpts when they are relevant;
-- citations in the form `[document, p.12]` or `[document, Slide 12]`;
+- citations in the form `[document, p.12]` or `[document, pp.12-13]`;
 - no invented document names or pages;
 - the exact sentence
   `Response is based on general knowledge; no specific course material is referenced.`
@@ -263,17 +281,20 @@ memory.
   until the user selects another snippet or clicks Clear.
 - `TaSettings` stores the endpoint and model in XML and the API key in
   `PasswordSafe`.
-- `CourseTaService` loads the bundled index from
-  `/index/course-index.json` and runs requests on the IntelliJ application
+- `CourseLibraryService`, `PdfCourseIndexBuilder`, `CourseIndexJsonCodec` and
+  `CourseLibraryStore` implement managed PDF import, validation and persistence.
+- `CourseTaService` prefers the active managed index, then a manual import, then
+  `/index/course-index.json`, and runs requests on the IntelliJ application
   executor.
 
 ## Efficiency considerations
 
-- The index is loaded once per project and kept in memory.
+- A managed index is loaded once per application and shared by projects; its
+  retriever is replaced lazily when the library revision changes.
 - Retrieval is O(chunks * dimensions) with no network call.
-- The index is 667 KiB and the full corpus is under 100k characters.
-- The LLM context is capped at 6000 characters and the selected-code context at
-  4000 characters.
+- The bundle is about 667 KiB; PDFBox artifacts add roughly 3.8 MiB to the ZIP.
+- The global IDE context is capped at 16000 characters and course excerpts use
+  the configurable context limit.
 - The API key is never written to project files or logs.
 
 ## Known limitations
@@ -282,5 +303,7 @@ memory.
   embedding endpoint without changing the chunk or citation contract.
 - Citation validation checks document and page validity, not semantic
   attribution.
-- Runtime PDF parsing is delegated to the Python indexer; the plugin imports the
-  generated JSON.
+- Managed PDF parsing scans only the selected folder's top level.
+- Scanned/image-only PDFs are not OCRed.
+- Encrypted or unsupported PDFs produce an indexing error while the previous
+  valid index remains active.

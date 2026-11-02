@@ -21,6 +21,7 @@ import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.SourceReference;
 import com.tongji.cst3492.jentor.service.ChatRequest;
+import com.tongji.cst3492.jentor.service.CourseLibraryService;
 import com.tongji.cst3492.jentor.service.CourseTaService;
 import com.tongji.cst3492.jentor.service.WorkspaceIndexService;
 import com.tongji.cst3492.jentor.settings.TaConfigurable;
@@ -103,6 +104,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JButton removeAttachmentButton = new JButton();
     private final JPopupMenu moreMenu = new JPopupMenu();
     private final JMenuItem courseMaterialsItem = new JMenuItem();
+    private final JMenuItem manageCourseMaterialsItem = new JMenuItem();
+    private final JMenuItem refreshCourseMaterialsItem = new JMenuItem();
     private final JMenuItem importIndexItem = new JMenuItem();
     private final JMenuItem clearConversationItem = new JMenuItem();
     private final Timer mockTimer;
@@ -146,7 +149,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         updateLanguageUi();
         updateStatus();
         updateMockBadge();
-        mockTimer = new Timer(2000, event -> updateMockBadge());
+        mockTimer = new Timer(2000, event -> {
+            updateMockBadge();
+            updateStatus();
+        });
         mockTimer.start();
         reflowTimer = new Timer(150, event -> reflowMessages());
         reflowTimer.setRepeats(false);
@@ -255,9 +261,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 moreMenu.show(moreButton, 0, moreButton.getHeight()));
 
         courseMaterialsItem.addActionListener(event -> showIndexInfo());
+        manageCourseMaterialsItem.addActionListener(event ->
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
+        refreshCourseMaterialsItem.addActionListener(event -> refreshCourseMaterials());
         importIndexItem.addActionListener(event -> loadIndex());
         clearConversationItem.addActionListener(event -> clearChat());
         moreMenu.add(courseMaterialsItem);
+        moreMenu.add(manageCourseMaterialsItem);
+        moreMenu.add(refreshCourseMaterialsItem);
         moreMenu.add(importIndexItem);
         moreMenu.addSeparator();
         moreMenu.add(clearConversationItem);
@@ -949,8 +960,27 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void updateStatus() {
         try {
             int count = service.getDocuments().size();
-            statusLabel.setText(I18n.t(currentLanguage(), "courseMaterialsReady")
-                    + count + I18n.t(currentLanguage(), "documents"));
+            CourseLibraryService library = service.getCourseLibraryService();
+            String language = currentLanguage();
+            if (!busy && I18n.t(language, "courseMaterialsIndexing")
+                    .equals(progressLabel.getText())) {
+                progressLabel.setText("");
+            }
+            if (library.isConfigured()) {
+                if (!library.getError().isBlank()) {
+                    statusLabel.setText(I18n.t(language, "indexError") + library.getError());
+                } else if (library.isIndexing()) {
+                    statusLabel.setText(I18n.t(language, "courseMaterialsIndexing"));
+                } else if (library.getIndex() != null) {
+                    statusLabel.setText(I18n.t(language, "courseMaterialsReady")
+                            + count + I18n.t(language, "documents"));
+                } else {
+                    statusLabel.setText(I18n.t(language, "courseMaterialsWaiting"));
+                }
+            } else {
+                statusLabel.setText(I18n.t(language, "courseMaterialsReady")
+                        + count + I18n.t(language, "documents"));
+            }
         } catch (Throwable error) {
             statusLabel.setText(I18n.t(currentLanguage(), "indexError")
                     + friendlyError(error));
@@ -972,6 +1002,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
         courseMaterialsItem.setText(I18n.t(language, "courseMaterials"));
+        manageCourseMaterialsItem.setText(I18n.t(language, "manageCourseMaterials"));
+        refreshCourseMaterialsItem.setText(I18n.t(language, "refreshCourseMaterials"));
         importIndexItem.setText(I18n.t(language, "importIndex"));
         clearConversationItem.setText(I18n.t(language, "clearConversation"));
         refreshAttachmentBar();
@@ -992,6 +1024,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         String language = currentLanguage();
         StringBuilder message = new StringBuilder();
         message.append(service.getIndexSummary()).append("\n\n");
+        CourseLibraryService library = service.getCourseLibraryService();
+        if (library.isConfigured()) {
+            message.append(I18n.t(language, "courseLibraryPath"))
+                    .append(library.getDirectory())
+                    .append('\n');
+            if (!library.getError().isBlank()) {
+                message.append(I18n.t(language, "indexError"))
+                        .append(library.getError())
+                        .append('\n');
+            }
+            message.append('\n');
+        }
         for (var document : service.getDocuments()) {
             message.append("- ")
                     .append(document.getFileName())
@@ -1002,6 +1046,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         Messages.showInfoMessage(project, message.toString(),
                 I18n.t(language, "courseMaterials"));
+    }
+
+    private void refreshCourseMaterials() {
+        service.refreshCourseLibrary();
+        progressLabel.setText(I18n.t(currentLanguage(), "courseMaterialsIndexing"));
+        updateStatus();
     }
 
     private void loadIndex() {

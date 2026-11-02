@@ -62,6 +62,21 @@ public final class I18n {
             case "documents" -> zh ? " 份课件" : " documents";
             case "mockBadge" -> zh ? "离线演示 / Mock" : "Mock mode";
             case "courseMaterials" -> zh ? "课程资料" : "Course materials";
+            case "manageCourseMaterials" -> zh
+                    ? "管理课程资料库…"
+                    : "Manage course library...";
+            case "refreshCourseMaterials" -> zh
+                    ? "刷新课程资料库"
+                    : "Refresh course library";
+            case "courseMaterialsIndexing" -> zh
+                    ? "正在解析并索引课程 PDF…"
+                    : "Parsing and indexing course PDFs...";
+            case "courseMaterialsWaiting" -> zh
+                    ? "课程资料库等待首次索引"
+                    : "Course library is waiting for its first index";
+            case "courseLibraryPath" -> zh
+                    ? "课程 PDF 目录："
+                    : "Course PDF folder: ";
             case "importIndex" -> zh ? "导入课程索引" : "Import course index";
             case "clearConversation" -> zh ? "清空会话" : "Clear conversation";
             case "warning" -> zh ? "提示：" : "Warning: ";

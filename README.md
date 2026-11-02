@@ -13,6 +13,11 @@ This is the F0 baseline required for every group.
 
 - A page-aware course index built from the nine lecture PDFs:
   **9 documents, 199 pages, 214 chunks**.
+- A managed course PDF library: choose a folder in settings and Jentor extracts,
+  chunks, indexes and atomically swaps the complete index when PDFs are added,
+  replaced or removed. PDFBox runs inside the plugin, so adding courseware no
+  longer requires Python or rebuilding the ZIP. VFS events are debounced and a
+  30-second fingerprint sweep catches missed external changes.
 - BM25-first hybrid retrieval with a hashed TF-IDF vector as a tie-breaker.
 - Exact-title and phrase boosts so "what is X?" questions reach the slide that
   defines X instead of a longer overview slide.
@@ -147,7 +152,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.0.0.zip
+build\distributions\jentor-1.1.0.zip
 ```
 
 Install it into IntelliJ:
@@ -161,19 +166,20 @@ Install it into IntelliJ:
 In IntelliJ:
 
 1. Open **Settings | Tools | Jentor**.
-2. Set the base URL and chat model.
-3. Paste the API key.
+2. Under **Course library**, choose the folder containing all course PDFs.
+3. Set the base URL and chat model.
+4. Paste the API key.
    Streaming is enabled by default; clear **Stream the answer while it is
    generated** if the endpoint does not support server-sent events.
-4. Open the **Jentor** tool window on the right.
-5. Ask a course question, for example:
+5. Open the **Jentor** tool window on the right.
+6. Ask a course question, for example:
    `What is a checked exception?`
-6. Select code in the editor, right-click, and choose
+7. Select code in the editor, right-click, and choose
    **Ask Jentor about Selection**.
-7. To add a whole file, right-click it in the editor or in the Project View and
+8. To add a whole file, right-click it in the editor or in the Project View and
    choose **Attach File to Jentor**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
-8. Tick **Ask in this workspace** in the tool window header to add the project
+9. Tick **Ask in this workspace** in the tool window header to add the project
    outline to every question; clear it to send course context only.
 
 To check the UI and citation path without an API key, open the settings and
@@ -195,9 +201,23 @@ Chat model: deepseek-chat
 For the Tongji AI platform, use the base URL and model name from the platform.
 The bundled index does not require an embedding API.
 
-## Rebuild the course index
+## Managed course library
 
-The indexer needs `pypdf`.
+The normal workflow is:
+
+1. Put every course PDF directly in one folder.
+2. Select that folder under **Settings | Tools | Jentor → Course library**.
+3. Jentor parses it in the background and displays indexing status.
+4. Add, replace or delete a PDF; the folder watcher rebuilds the index.
+5. The old index remains active until the new index is complete and valid.
+
+The generated index and source fingerprint are cached under the IDE system
+directory. A 30-second sweep catches changes missed by the VFS watcher. Only
+top-level PDFs are scanned. Image-only PDFs require OCR before Jentor can read
+them.
+
+The bundled Python-generated index remains a fallback when no managed folder is
+configured. The optional Python workflow is:
 
 ```powershell
 python tools\build_index.py `
@@ -213,8 +233,17 @@ python tools\build_index.py `
   --output "src\main\resources\index\course-index.json"
 ```
 
-After rebuilding, either rebuild the plugin or use **Course materials → Import
-course index** in the tool window and select the new JSON file.
+The in-plugin PDFBox indexer can also be run as a verification CLI:
+
+```powershell
+.\gradlew.bat runPdfIndexHarness --offline -Pmaterials="<课件目录>" `
+  -Poutput="build\validation\course-index.json"
+```
+
+The manually generated JSON can still be imported with **Course materials →
+Import course index**. PDFBox and pypdf can produce slightly different page text;
+the managed library therefore may have a different chunk count from the bundled
+214-chunk index while preserving the same document and page citations.
 
 ## Retrieval evaluation
 
@@ -245,7 +274,7 @@ so that command needs network access on a fresh Gradle cache.
 
 ```text
 PDF slides
-  -> pypdf page extraction (default or layout mode, whichever is readable)
+  -> PDFBox page extraction (managed library; Python/pypdf fallback)
   -> page-bounded chunks with document/page metadata
   -> hashed TF-IDF vectors + IDF table
   -> course-index.json (bundled resource)
@@ -263,6 +292,9 @@ Question + selected code
 Key packages:
 
 - `tools/build_index.py`: extraction, chunking, and index generation.
+- `context/PdfCourseIndexBuilder.java`, `context/CourseLibraryStore.java`,
+  `service/CourseLibraryService.java`: in-plugin PDF parsing, persistent cache,
+  VFS monitoring, atomic index replacement, and fingerprint sweep.
 - `index/Tokens.java`, `index/LocalEmbedder.java`, `index/Retriever.java`:
   retrieval runtime.
 - `llm/PromptBuilder.java`, `llm/CitationValidator.java`,
@@ -277,8 +309,8 @@ Key packages:
 - Plugin installation and live model calls must be smoke-tested on a machine
   with IntelliJ IDEA installed and API access configured.
 - The bundled index was generated from the course PDF slides.
-- Runtime PDF reindexing is performed by the Python script; the plugin imports
-  the generated JSON.
+- The managed library scans only the configured folder's top level and does not
+  perform OCR for scanned/image-only PDFs.
 - The local vector is lexical. A real embedding endpoint can be added later
   without changing the citation contract.
 - Citation validation catches invalid document/page pairs, but it cannot prove

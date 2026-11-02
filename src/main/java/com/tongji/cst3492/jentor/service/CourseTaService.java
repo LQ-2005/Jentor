@@ -1,6 +1,7 @@
 package com.tongji.cst3492.jentor.service;
 
 import com.intellij.openapi.components.Service;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.tongji.cst3492.jentor.index.Retriever;
@@ -38,6 +39,9 @@ public final class CourseTaService {
     private volatile Retriever retriever;
     private volatile AnswerService realAnswerService;
     private volatile AnswerService mockAnswerService;
+    private volatile CourseIndex bundledIndex;
+    private volatile CourseIndex importedIndex;
+    private volatile long importedAtRevision = -1L;
     private volatile CodeContext pendingContext;
     private final List<CodeFileSnapshot> pendingFiles = new CopyOnWriteArrayList<>();
 
@@ -50,13 +54,16 @@ public final class CourseTaService {
     }
 
     public Retriever getRetriever() {
+        CourseIndex expected = resolveIndex();
         Retriever local = retriever;
-        if (local == null) {
+        if (local == null || local.getIndex() != expected) {
             synchronized (this) {
                 local = retriever;
-                if (local == null) {
-                    local = loadRetriever();
+                if (local == null || local.getIndex() != expected) {
+                    local = new Retriever(expected);
                     retriever = local;
+                    realAnswerService = null;
+                    mockAnswerService = null;
                 }
             }
         }
@@ -79,11 +86,28 @@ public final class CourseTaService {
             CourseIndex newIndex = CourseIndex.load(input);
             Retriever newRetriever = new Retriever(newIndex);
             synchronized (this) {
+                importedIndex = newIndex;
+                importedAtRevision = libraryService().getRevision();
                 retriever = newRetriever;
                 realAnswerService = null;
                 mockAnswerService = null;
             }
         }
+    }
+
+    public void refreshCourseLibrary() {
+        synchronized (this) {
+            importedIndex = null;
+            importedAtRevision = -1L;
+            retriever = null;
+            realAnswerService = null;
+            mockAnswerService = null;
+        }
+        libraryService().refreshAsync();
+    }
+
+    public CourseLibraryService getCourseLibraryService() {
+        return libraryService();
     }
 
     public ChatRequest ask(
@@ -227,16 +251,54 @@ public final class CourseTaService {
         return local;
     }
 
-    private Retriever loadRetriever() {
-        try (InputStream input = getClass().getResourceAsStream("/index/course-index.json")) {
-            if (input == null) {
-                throw new IllegalStateException(
-                        "Bundled course index /index/course-index.json is missing.");
-            }
-            return new Retriever(CourseIndex.load(input));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Cannot load the bundled course index", e);
+    private CourseIndex resolveIndex() {
+        CourseLibraryService library = libraryService();
+        CourseIndex imported = importedIndex;
+        if (imported != null && importedAtRevision == library.getRevision()) {
+            return imported;
         }
+        if (imported != null) {
+            synchronized (this) {
+                importedIndex = null;
+                importedAtRevision = -1L;
+            }
+        }
+        CourseIndex managed = library.getIndex();
+        return managed == null ? bundledIndex() : managed;
+    }
+
+    private CourseIndex bundledIndex() {
+        CourseIndex local = bundledIndex;
+        if (local == null) {
+            synchronized (this) {
+                local = bundledIndex;
+                if (local == null) {
+                    try (InputStream input = getClass().getResourceAsStream(
+                            "/index/course-index.json")) {
+                        if (input == null) {
+                            throw new IllegalStateException(
+                                    "Bundled course index /index/course-index.json is missing.");
+                        }
+                        local = CourseIndex.load(input);
+                        bundledIndex = local;
+                    } catch (IOException error) {
+                        throw new UncheckedIOException(
+                                "Cannot load the bundled course index", error);
+                    }
+                }
+            }
+        }
+        return local;
+    }
+
+    private CourseLibraryService libraryService() {
+        CourseLibraryService service = ApplicationManager.getApplication()
+                .getService(CourseLibraryService.class);
+        if (service == null) {
+            throw new IllegalStateException("Jentor course library service is unavailable");
+        }
+        service.ensureStarted();
+        return service;
     }
 
 }

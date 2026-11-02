@@ -42,6 +42,37 @@ public final class CourseIndex {
         this.chunks = List.copyOf(chunks);
     }
 
+    public static CourseIndex create(
+            int version,
+            String embeddingModel,
+            int dimensions,
+            int chunkCount,
+            float defaultIdf,
+            Map<String, Float> idf,
+            List<DocumentMeta> documents,
+            List<Chunk> chunks) {
+        if (dimensions <= 0 || documents == null || documents.isEmpty()
+                || chunks == null || chunks.isEmpty()) {
+            throw new IllegalArgumentException("Course index must contain dimensions, documents and chunks");
+        }
+        for (Chunk chunk : chunks) {
+            if (chunk.getVector().length != dimensions) {
+                throw new IllegalArgumentException(
+                        "Chunk " + chunk.getId() + " has " + chunk.getVector().length
+                                + " dimensions, expected " + dimensions);
+            }
+        }
+        return new CourseIndex(
+                version,
+                embeddingModel,
+                dimensions,
+                chunkCount <= 0 ? chunks.size() : chunkCount,
+                defaultIdf,
+                new HashMap<>(idf),
+                documents,
+                chunks);
+    }
+
     public static CourseIndex load(InputStream input) {
         try {
             JsonNode root = new ObjectMapper().readTree(input);

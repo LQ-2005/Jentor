@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.0.0.zip
+build/distributions/jentor-1.1.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,11 +147,27 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.0.0.zip`；
+3. 选择 `build/distributions/jentor-1.1.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
 ## 6. 配置模型
+
+先配置课程资料库：
+
+1. `Settings → Tools → Jentor`；
+2. 在 “Course library / 课程资料库” 中选择保存全部课程 PDF 的文件夹；
+3. `Apply`。
+
+Jentor 会立即在后台用内置 PDFBox 解析全部 PDF。之后往该目录新增、替换或删除 PDF，插件会自动重建索引。解析期间顶部状态显示“正在解析并索引课程 PDF”，完成后显示课件数量。解析失败时旧索引继续可用。
+
+课程资料库有以下限制：
+
+- 只扫描所选目录第一层；
+- 不扫描子目录；
+- 不执行 OCR，纯图片 PDF 无法提取文字；
+- 索引缓存位于 IntelliJ 系统目录；
+- 不需要 Python 或 `pypdf`。
 
 先测试离线 Mock：
 
@@ -170,9 +186,9 @@ API key: 你自己的 Key
 
 API Key 保存在每台电脑各自的 IntelliJ `PasswordSafe` 中，不会进入源码或 Git。
 
-## 7. 可选：重建课程索引
+## 7. 可选：重建静态课程索引
 
-插件运行不需要这一步。需要重新解析 PDF 时，在一台有 Python 和 `pypdf` 的电脑上执行：
+正常使用不需要这一步；资料库会自动索引。需要修改插件内置的备用索引时，在一台有 Python 和 `pypdf` 的电脑上执行：
 
 ```powershell
 python tools/build_index.py `
@@ -214,7 +230,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.0.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.1.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -224,3 +240,6 @@ python tools/build_index.py `
 - [ ] 输入框右键有剪切/复制/粘贴/全选
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制
+- [ ] 设置课程 PDF 目录后，状态从“正在索引”变为就绪
+- [ ] 向目录新增 PDF 后，课件数量自动增加
+- [ ] 无效或损坏 PDF 不会清空上一份可用索引

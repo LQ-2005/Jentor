@@ -53,5 +53,6 @@ public final class TaSettings implements PersistentStateComponent<TaSettings.Sta
         public boolean useMockModel = false;
         public boolean streamOutput = true;
         public boolean workspaceContext = false;
+        public String courseMaterialsPath = "";
     }
 }
