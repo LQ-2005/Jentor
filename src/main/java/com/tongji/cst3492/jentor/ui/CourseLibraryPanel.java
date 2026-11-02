@@ -16,7 +16,9 @@ import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -46,12 +48,14 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     private final JButton addFiles = new JButton();
     private final JButton addFolder = new JButton();
     private final JButton refresh = new JButton();
-    private final JButton rebuild = new JButton();
-    private final JButton remove = new JButton();
     private final JButton openPdf = new JButton();
-    private final JButton openFolder = new JButton();
-    private final JButton locate = new JButton();
-    private final JButton copyPath = new JButton();
+    private final JButton more = new JButton("⋯");
+    private final JPopupMenu moreMenu = new JPopupMenu();
+    private final JMenuItem rebuild = new JMenuItem();
+    private final JMenuItem remove = new JMenuItem();
+    private final JMenuItem openFolder = new JMenuItem();
+    private final JMenuItem locate = new JMenuItem();
+    private final JMenuItem copyPath = new JMenuItem();
     private final Timer refreshTimer;
     private String language;
 
@@ -69,6 +73,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setAutoCreateRowSorter(true);
+        table.setComponentPopupMenu(moreMenu);
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
@@ -86,30 +91,28 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     }
 
     private JPanel createToolbar() {
-        JPanel toolbar = new JPanel();
-        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         configure(addFiles, this::chooseFiles);
         configure(addFolder, this::chooseFolder);
         configure(refresh, () -> service.refreshAll());
+        configure(openPdf, () -> openSelected(false));
         configure(rebuild, this::rebuildSelected);
         configure(remove, this::removeSelected);
-        configure(openPdf, () -> openSelected(false));
         configure(openFolder, () -> openSelected(true));
         configure(locate, this::locateSelected);
         configure(copyPath, this::copySelectedPath);
-        JPanel primary = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        primary.add(addFiles);
-        primary.add(addFolder);
-        primary.add(refresh);
-        primary.add(rebuild);
-        JPanel secondary = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        secondary.add(remove);
-        secondary.add(openPdf);
-        secondary.add(openFolder);
-        secondary.add(locate);
-        secondary.add(copyPath);
-        toolbar.add(primary);
-        toolbar.add(secondary);
+        configure(more, () -> moreMenu.show(more, 0, more.getHeight()));
+        moreMenu.add(rebuild);
+        moreMenu.add(remove);
+        moreMenu.addSeparator();
+        moreMenu.add(openFolder);
+        moreMenu.add(locate);
+        moreMenu.add(copyPath);
+        toolbar.add(addFiles);
+        toolbar.add(addFolder);
+        toolbar.add(refresh);
+        toolbar.add(openPdf);
+        toolbar.add(more);
         return toolbar;
     }
 
@@ -271,6 +274,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
         rebuild.setText(text("重新索引", "Rebuild"));
         remove.setText(text("移除资料", "Remove"));
         openPdf.setText(text("打开文件", "Open file"));
+        more.setToolTipText(text("更多操作", "More actions"));
         openFolder.setText(text("打开所在文件夹", "Show folder"));
         locate.setText(text("定位缺失文件", "Locate"));
         copyPath.setText(text("复制路径", "Copy path"));
@@ -294,6 +298,10 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
     private static void configure(JButton button, Runnable action) {
         button.setMargin(JBUI.insets(2, 6));
         button.addActionListener(event -> action.run());
+    }
+
+    private static void configure(JMenuItem item, Runnable action) {
+        item.addActionListener(event -> action.run());
     }
 
     @Override
@@ -320,7 +328,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
 
         @Override
         public int getColumnCount() {
-            return 8;
+            return 6;
         }
 
         @Override
@@ -332,8 +340,7 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
                 case 3 -> text("原始位置", "Original location");
                 case 4 -> text("定位单元", "Locations");
                 case 5 -> "Chunks";
-                case 6 -> text("表格 / 图片", "Tables / Images");
-                default -> text("错误", "Error");
+                default -> "";
             };
         }
 
@@ -343,13 +350,22 @@ public final class CourseLibraryPanel extends JPanel implements Disposable {
             return switch (columnIndex) {
                 case 0 -> statusText(source.status());
                 case 1 -> source.displayName();
-                case 2 -> source.fileType();
+                case 2 -> displayType(source);
                 case 3 -> source.path();
                 case 4 -> source.pageCount() == 0 ? "" : source.pageCount();
                 case 5 -> source.chunkCount() == 0 ? "" : source.chunkCount();
-                case 6 -> source.tableCount() + " / " + source.imageCount();
-                default -> source.error();
+                default -> "";
             };
         }
+    }
+
+    private static String displayType(CourseDocumentSource source) {
+        if (!source.fileType().isBlank()) {
+            return source.fileType();
+        }
+        String path = source.path();
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? "" : path.substring(dot + 1)
+                .toUpperCase(java.util.Locale.ROOT);
     }
 }
