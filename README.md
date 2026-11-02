@@ -58,8 +58,10 @@ This is the F0 baseline required for every group.
 - A bilingual (中文 / English) IntelliJ tool window with left/right chat bubbles,
   language selection, settings, and a direct **Clear conversation** button.
   Course material actions live only in the **Course materials** tab, not in the
-  chat header. A compact `API / 离线` selector and an icon-only send/stop control
-  sit at the bottom-right of the rounded composer. The
+  chat header. The rounded composer has the workspace-context checkbox at
+  bottom-left and a borderless `Mock / DeepSeek` selector plus an icon-only
+  single-arrow send/stop control at bottom-right. The mode selector shows only
+  text and a chevron until hovered, then gains a rounded hover background. The
   answer language follows the selector. English mode uses the original fallback
   sentence; Chinese mode uses the equivalent Chinese sentence.
 - Multi-turn conversation memory: the most recent user/assistant turns are sent
@@ -102,8 +104,8 @@ This is the F0 baseline required for every group.
   formats such as `.properties`, `.xml` and `.json` are refused, obvious secret
   assignments and private keys are blocked, and up to 5 files are attached. Each
   file is capped at 400 lines or 4000 characters.
-- When **Ask in this workspace** is enabled in the tool window header, every
-  question also carries a structural outline of the project: file paths, type
+- When **Ask in this workspace** is enabled at the bottom-left of the composer,
+  every question also carries a structural outline of the project: file paths, type
   declarations and member signatures, plus a bounded excerpt (120 lines or 1800
   characters) of the two most relevant files, so a question about code can
   actually be answered. The outline comes from an index built in the background
@@ -167,7 +169,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.3.5.zip
+build\distributions\jentor-1.3.6.zip
 ```
 
 Install it into IntelliJ:
@@ -194,7 +196,7 @@ In IntelliJ:
 8. To add a whole file, right-click it in the editor or in the Project View and
    choose **Attach File to Jentor**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
-9. Tick **Ask in this workspace** in the tool window header to add the project
+9. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
    outline to every question; clear it to send course context only.
 
 To check the UI and citation path without an API key, open the settings and

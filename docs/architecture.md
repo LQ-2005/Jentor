@@ -278,10 +278,12 @@ memory.
   executing model HTML.
 - The top bar exposes language, settings, and Clear conversation without mixing
   in course-library actions. Course management, refresh, and manual JSON index
-  import belong to the Course materials tab. The composer footer exposes an
-  `API / 离线` selector plus an icon-only send/stop button. A timer keeps the
-  selector in sync with settings. The attachment bar shows the selected line
-  range and provides View/Remove actions.
+  import belong to the Course materials tab. The composer footer places the
+  workspace-context checkbox at bottom-left and a borderless `Mock / DeepSeek`
+  selector plus a single-arrow send/stop button at bottom-right. The mode
+  selector paints a rounded hover background while the pointer is over it. A
+  timer keeps it in sync with settings. The attachment bar shows the selected
+  line range and provides View/Remove actions.
 - `AskSelectionAction` is registered in `EditorPopupMenu`. It attaches the
   selected code and opens the tool window.
 - `SelectionContextFactory` captures the selected text, up to 20 lines before

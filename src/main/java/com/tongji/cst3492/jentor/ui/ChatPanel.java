@@ -33,7 +33,9 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
@@ -44,6 +46,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.BorderLayout;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Desktop;
 import java.awt.Dimension;
@@ -84,7 +87,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JPanel transcriptPanel = new JPanel();
     private final JBScrollPane transcriptScroll = new JBScrollPane(transcriptPanel);
     private final JBTextArea input = new JBTextArea();
-    private final JButton sendButton = new ComposerSendButton();
+    private final ComposerSendButton sendButton = new ComposerSendButton();
     private final JButton settingsButton = new JButton();
     private final JButton clearConversationButton = new JButton();
     private final JButton newReplyButton = new JButton();
@@ -92,7 +95,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JCheckBox workspaceBox = new JCheckBox();
     private final JComboBox<String> languageBox =
             new JComboBox<>(new String[]{"中文", "English"});
-    private final JComboBox<String> modeBox = new JComboBox<>();
+    private final ComposerModeButton modeButton = new ComposerModeButton();
+    private final JPopupMenu modeMenu = new JPopupMenu();
+    private final JMenuItem mockModeItem = new JMenuItem("Mock");
+    private final JMenuItem deepSeekModeItem = new JMenuItem("DeepSeek");
     private final JPanel attachmentBar = new JPanel(new BorderLayout(6, 0));
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
@@ -112,7 +118,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private AssistantBubble streamCard;
     private boolean busy;
     private int requestGeneration;
-    private boolean syncingModeBox;
 
     public ChatPanel(Project project) {
         super(new BorderLayout(0, 8));
@@ -210,21 +215,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         controls.setOpaque(false);
-        workspaceBox.setFont(workspaceBox.getFont().deriveFont(11f));
-        workspaceBox.setOpaque(false);
-        workspaceBox.setSelected(TaSettings.getInstance().getState().workspaceContext);
-        workspaceBox.setToolTipText("Include the workspace code outline in the question");
-        workspaceBox.addActionListener(event -> {
-            TaSettings.State state = TaSettings.getInstance().getState();
-            state.workspaceContext = workspaceBox.isSelected();
-            if (workspaceBox.isSelected()) {
-                WorkspaceIndexService indexService =
-                        project.getService(WorkspaceIndexService.class);
-                if (indexService != null) {
-                    indexService.ensureBuiltAsync();
-                }
-            }
-        });
         languageBox.setSelectedIndex("zh".equals(
                 TaSettings.getInstance().getState().language) ? 0 : 1);
         languageBox.setFont(languageBox.getFont().deriveFont(11f));
@@ -239,7 +229,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 ShowSettingsUtil.getInstance().showSettingsDialog(project, TaConfigurable.class));
         configureButton(clearConversationButton, event -> clearChat());
 
-        controls.add(workspaceBox);
         controls.add(languageBox);
         controls.add(settingsButton);
         controls.add(clearConversationButton);
@@ -255,6 +244,38 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         button.setFont(button.getFont().deriveFont(11f));
         button.setMargin(new Insets(2, 6, 2, 6));
         button.addActionListener(listener);
+    }
+
+    private void configureWorkspaceToggle() {
+        workspaceBox.setFont(workspaceBox.getFont().deriveFont(11f));
+        workspaceBox.setOpaque(false);
+        workspaceBox.setSelected(TaSettings.getInstance().getState().workspaceContext);
+        updateWorkspaceTooltip();
+        workspaceBox.addActionListener(event -> {
+            TaSettings.State state = TaSettings.getInstance().getState();
+            state.workspaceContext = workspaceBox.isSelected();
+            if (workspaceBox.isSelected()) {
+                WorkspaceIndexService indexService =
+                        project.getService(WorkspaceIndexService.class);
+                if (indexService != null) {
+                    indexService.ensureBuiltAsync();
+                }
+            }
+            input.requestFocusInWindow();
+        });
+    }
+
+    private void configureModeMenu() {
+        modeButton.setFont(modeButton.getFont().deriveFont(11f));
+        modeButton.setIcon(AllIcons.General.ArrowDown);
+        modeButton.setIconTextGap(4);
+        modeButton.setBorder(JBUI.Borders.empty(4, 8));
+        modeButton.addActionListener(event ->
+                modeMenu.show(modeButton, 0, -modeMenu.getPreferredSize().height));
+        mockModeItem.addActionListener(event -> selectMode(true));
+        deepSeekModeItem.addActionListener(event -> selectMode(false));
+        modeMenu.add(mockModeItem);
+        modeMenu.add(deepSeekModeItem);
     }
 
     private JPanel createCenterPanel() {
@@ -277,6 +298,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private JPanel createBottomPanel() {
+        configureWorkspaceToggle();
         attachmentBar.setOpaque(false);
         attachmentBar.setVisible(false);
         attachmentLabel.setForeground(JBColor.GRAY);
@@ -349,29 +371,22 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             }
         });
 
-        modeBox.setFont(modeBox.getFont().deriveFont(11f));
-        modeBox.setMaximumRowCount(2);
-        modeBox.setPreferredSize(new Dimension(104, 24));
-        modeBox.putClientProperty("JComponent.sizeVariant", "small");
-        modeBox.addActionListener(event -> {
-            if (syncingModeBox || modeBox.getSelectedIndex() < 0) {
-                return;
-            }
-            TaSettings.State state = TaSettings.getInstance().getState();
-            boolean mock = modeBox.getSelectedIndex() == 1;
-            if (state.useMockModel == mock) {
-                return;
-            }
-            state.useMockModel = mock;
-            updateModeTooltip();
-            input.requestFocusInWindow();
-        });
+        configureModeMenu();
         updateModeSelector();
+
+        JPanel workspaceArea = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        workspaceArea.setOpaque(false);
+        workspaceArea.add(workspaceBox);
 
         JPanel composerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         composerActions.setOpaque(false);
-        composerActions.add(modeBox);
+        composerActions.add(modeButton);
         composerActions.add(sendButton);
+
+        JPanel composerFooter = new JPanel(new BorderLayout(6, 0));
+        composerFooter.setOpaque(false);
+        composerFooter.add(workspaceArea, BorderLayout.WEST);
+        composerFooter.add(composerActions, BorderLayout.EAST);
 
         ComposerPanel inputPanel = new ComposerPanel();
         JBScrollPane inputScroll = new JBScrollPane(input);
@@ -381,7 +396,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         inputScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         input.setOpaque(false);
         inputPanel.add(inputScroll, BorderLayout.CENTER);
-        inputPanel.add(composerActions, BorderLayout.SOUTH);
+        inputPanel.add(composerFooter, BorderLayout.SOUTH);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 4));
         bottom.setOpaque(false);
@@ -488,7 +503,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void updateSendButton() {
         String language = currentLanguage();
         String action = I18n.t(language, busy ? "stop" : "send");
-        sendButton.setIcon(busy ? AllIcons.Actions.Suspend : AllIcons.Actions.Upload);
+        sendButton.setStopping(busy);
         sendButton.setText("");
         sendButton.setToolTipText(action);
         sendButton.getAccessibleContext().setAccessibleName(action);
@@ -930,29 +945,33 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void updateModeSelector() {
         String language = currentLanguage();
-        String apiLabel = I18n.t(language, "apiMode");
-        String offlineLabel = I18n.t(language, "offlineMode");
         boolean mock = TaSettings.getInstance().getState().useMockModel;
-        syncingModeBox = true;
-        try {
-            if (modeBox.getItemCount() != 2
-                    || !apiLabel.equals(modeBox.getItemAt(0))
-                    || !offlineLabel.equals(modeBox.getItemAt(1))) {
-                modeBox.removeAllItems();
-                modeBox.addItem(apiLabel);
-                modeBox.addItem(offlineLabel);
-            }
-            modeBox.setSelectedIndex(mock ? 1 : 0);
-            updateModeTooltip();
-        } finally {
-            syncingModeBox = false;
-        }
+        modeButton.setText(mock ? I18n.t(language, "mockMode")
+                : I18n.t(language, "deepSeekMode"));
+        updateModeTooltip();
+    }
+
+    private void updateWorkspaceTooltip() {
+        workspaceBox.setToolTipText(I18n.t(currentLanguage(), "askInWorkspaceHint"));
     }
 
     private void updateModeTooltip() {
         String language = currentLanguage();
         boolean mock = TaSettings.getInstance().getState().useMockModel;
-        modeBox.setToolTipText(I18n.t(language, mock ? "offlineModeHint" : "apiModeHint"));
+        String hint = I18n.t(language, mock ? "mockModeHint" : "deepSeekModeHint");
+        modeButton.setToolTipText(hint);
+        modeButton.getAccessibleContext().setAccessibleName(
+                modeButton.getText() + " - " + hint);
+    }
+
+    private void selectMode(boolean mock) {
+        TaSettings.State state = TaSettings.getInstance().getState();
+        if (state.useMockModel == mock) {
+            return;
+        }
+        state.useMockModel = mock;
+        updateModeSelector();
+        input.requestFocusInWindow();
     }
 
     private void setProgressText(String text) {
@@ -967,6 +986,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         String language = currentLanguage();
         settingsButton.setText(I18n.t(language, "settings"));
         workspaceBox.setText(I18n.t(language, "askInWorkspace"));
+        updateWorkspaceTooltip();
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
@@ -1118,13 +1138,57 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
     }
 
+    private static final class ComposerModeButton extends JButton {
+        private ComposerModeButton() {
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setRolloverEnabled(true);
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (getModel().isRollover() || getModel().isPressed()) {
+                Graphics2D g2 = (Graphics2D) graphics.create();
+                g2.setRenderingHint(
+                        RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                Color fill = UIManager.getColor("ActionButton.hoverBackground");
+                if (fill == null) {
+                    fill = UIManager.getColor("Button.hoverBackground");
+                }
+                if (fill == null) {
+                    fill = new JBColor(new Color(0xECEEF1), new Color(0x3C3F41));
+                }
+                if (getModel().isPressed()) {
+                    fill = fill.darker();
+                }
+                int arc = Math.max(8, getHeight() - 4);
+                g2.setColor(fill);
+                g2.fillRoundRect(1, 2, getWidth() - 3, getHeight() - 5, arc, arc);
+                g2.dispose();
+            }
+            super.paintComponent(graphics);
+        }
+    }
+
     private static final class ComposerSendButton extends JButton {
+        private boolean stopping;
+
         private ComposerSendButton() {
             setOpaque(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
             setFocusPainted(false);
             setRolloverEnabled(true);
+        }
+
+        private void setStopping(boolean stopping) {
+            if (this.stopping != stopping) {
+                this.stopping = stopping;
+                repaint();
+            }
         }
 
         @Override
@@ -1147,8 +1211,28 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             }
             g2.setColor(JBColor.border());
             g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
+
+            Color glyph = isEnabled()
+                    ? UIManager.getColor("Label.foreground")
+                    : UIManager.getColor("Label.disabledForeground");
+            if (glyph == null) {
+                glyph = JBColor.GRAY;
+            }
+            g2.setColor(glyph);
+            int centerX = getWidth() / 2;
+            int centerY = getHeight() / 2;
+            if (stopping) {
+                g2.fillRoundRect(centerX - 4, centerY - 4, 8, 8, 2, 2);
+            } else {
+                g2.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                int top = centerY - 5;
+                int bottom = centerY + 4;
+                g2.drawLine(centerX, bottom, centerX, top);
+                g2.drawLine(centerX, top, centerX - 3, top + 3);
+                g2.drawLine(centerX, top, centerX + 3, top + 3);
+            }
             g2.dispose();
-            super.paintComponent(graphics);
         }
     }
 }

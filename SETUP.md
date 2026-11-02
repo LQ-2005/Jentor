@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.3.5.zip
+build/distributions/jentor-1.3.6.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.3.5.zip`；
+3. 选择 `build/distributions/jentor-1.3.6.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -242,7 +242,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.3.5 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.3.6 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -251,7 +251,9 @@ python tools/build_index.py `
 - [ ] 中文/English 切换正常
 - [ ] 聊天页只显示独立的“清空会话”按钮，不再出现课程资料菜单
 - [ ] 聊天页顶部不再显示课程资料数量或独立 Mock 徽标
-- [ ] 输入框右下角可在 API/离线之间切换，并使用图标发送和停止
+- [ ] 工作区提问开关位于输入框左下角
+- [ ] 输入框右下角可在 Mock/DeepSeek 之间切换，模式文字悬停时显示圆角底色
+- [ ] 发送按钮使用单一向上箭头，生成期间显示停止图标
 - [ ] 回答卡片只保留引用来源按钮，不再显示复制回答和检索候选
 - [ ] 输入框右键有剪切/复制/粘贴/全选
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条

@@ -56,12 +56,15 @@ public final class I18n {
             case "footnotePrefix" -> zh ? "注：" : "Note: ";
             case "attachedFiles" -> zh ? "个文件" : "files";
             case "askInWorkspace" -> zh ? "在本工作区中询问" : "Ask in this workspace";
-            case "apiMode" -> "API";
-            case "offlineMode" -> zh ? "离线" : "Offline";
-            case "apiModeHint" -> zh
+            case "askInWorkspaceHint" -> zh
+                    ? "每次提问时附加项目结构和相关代码摘录"
+                    : "Include the project structure and relevant code excerpts";
+            case "mockMode" -> "Mock";
+            case "deepSeekMode" -> "DeepSeek";
+            case "deepSeekModeHint" -> zh
                     ? "使用设置中配置的在线 API 模型"
                     : "Use the configured online API model";
-            case "offlineModeHint" -> zh
+            case "mockModeHint" -> zh
                     ? "使用离线演示模型，不发送网络请求"
                     : "Use the offline demo model without network requests";
             case "courseMaterials" -> zh ? "课程资料" : "Course materials";
