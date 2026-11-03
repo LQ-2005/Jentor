@@ -3,8 +3,14 @@ package com.tongji.cst3492.jentor.ui;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectUtil;
+import com.intellij.openapi.vfs.VfsUtilCore;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.icons.AllIcons;
 import com.intellij.ui.JBColor;
@@ -23,6 +29,8 @@ import com.tongji.cst3492.jentor.llm.CitationStatus;
 import com.tongji.cst3492.jentor.llm.PromptBuilder;
 import com.tongji.cst3492.jentor.llm.StreamSink;
 import com.tongji.cst3492.jentor.context.CodeFilePolicy;
+import com.tongji.cst3492.jentor.context.EditTargetPicker;
+import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.CourseDocumentSource;
@@ -111,6 +119,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JBLabel conversationTitleLabel = new JBLabel();
     private final JBLabel progressLabel = new JBLabel();
     private final JCheckBox workspaceBox = new JCheckBox();
+    private final JCheckBox editBox = new JCheckBox();
     private final JComboBox<String> languageBox =
             new JComboBox<>(new String[]{"中文", "English"});
     private final ComposerModeButton modeButton = new ComposerModeButton();
@@ -331,6 +340,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         });
     }
 
+    private void configureEditToggle() {
+        editBox.setFont(editBox.getFont().deriveFont(11f));
+        editBox.setOpaque(false);
+        editBox.setSelected(TaSettings.getInstance().getState().editWorkspace);
+        editBox.setToolTipText(I18n.t(currentLanguage(), "editWorkspaceHint"));
+        editBox.addActionListener(event -> {
+            TaSettings.getInstance().getState().editWorkspace = editBox.isSelected();
+            input.requestFocusInWindow();
+        });
+    }
+
     private void configureModeMenu() {
         modeButton.setFont(modeButton.getFont().deriveFont(11f));
         modeButton.setIcon(AllIcons.General.ArrowDown);
@@ -367,6 +387,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private JPanel createBottomPanel() {
         configureWorkspaceToggle();
+        configureEditToggle();
         attachmentBar.setOpaque(false);
         attachmentBar.setVisible(false);
         attachmentLabel.setForeground(JBColor.GRAY);
@@ -464,6 +485,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel workspaceArea = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         workspaceArea.setOpaque(false);
         workspaceArea.add(workspaceBox);
+        workspaceArea.add(editBox);
 
         JPanel composerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         composerActions.setOpaque(false);
@@ -501,12 +523,91 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
     }
 
+    /** Runs one edit request and opens the diff review when a proposal comes back. */
+    private void sendEdit(String instruction) {
+        String target = EditTargetPicker.pick(
+                pendingFiles.stream().map(CodeFileSnapshot::path).toList(),
+                selectedEditorPath());
+        if (target == null) {
+            appendError(I18n.t(currentLanguage(), "editNoTarget"), currentLanguage(), instruction);
+            return;
+        }
+        int startLine = 0;
+        int endLine = 0;
+        if (pendingCodeContext != null && pendingCodeContext.hasSelection()) {
+            startLine = pendingCodeContext.startLine();
+            endLine = pendingCodeContext.endLine();
+        }
+        String sentAttachmentSummary = attachmentSummary();
+        appendMessage("user", instruction, false, true, sentAttachmentSummary);
+        input.setText("");
+        busy = true;
+        int generation = ++requestGeneration;
+        updateSendButton();
+        setProgressText(I18n.t(currentLanguage(), "editGenerating"));
+        service.edit(instruction, target, startLine, endLine).whenComplete((result, error) ->
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (generation != requestGeneration) {
+                        return;
+                    }
+                    busy = false;
+                    setProgressText("");
+                    updateSendButton();
+                    if (error != null) {
+                        appendError(friendlyError(error), currentLanguage(), instruction);
+                        return;
+                    }
+                    if (result.hasProposal()) {
+                        var proposal = result.proposal();
+                        VirtualFile file = WorkspaceFileReader.resolve(project, proposal.path());
+                        Document document = file == null
+                                ? null
+                                : FileDocumentManager.getInstance().getDocument(file);
+                        if (file == null || document == null) {
+                            appendError("File not found: " + proposal.path(),
+                                    currentLanguage(), instruction);
+                            return;
+                        }
+                        new EditReviewDialog(project, file, document, proposal.newText(), instruction)
+                                .show();
+                        return;
+                    }
+                    if (result.noChange()) {
+                        appendMessage("assistant", I18n.t(currentLanguage(), "editNoChange"),
+                                false, false, "");
+                        return;
+                    }
+                    appendError(I18n.t(currentLanguage(), "editRefused") + result.refusal(),
+                            currentLanguage(), instruction);
+                }));
+    }
+
+    /** Path of the file in the active editor tab, or {@code null}. */
+    private String selectedEditorPath() {
+        VirtualFile[] files = FileEditorManager.getInstance(project).getSelectedFiles();
+        for (VirtualFile file : files) {
+            if (file == null || file.isDirectory() || file.getFileType().isBinary()) {
+                continue;
+            }
+            String path = VfsUtilCore.getRelativePath(
+                    file, ProjectUtil.guessProjectDir(project), '/');
+            if (path != null && !path.isBlank()) {
+                return path;
+            }
+        }
+        return null;
+    }
+
     private void send() {
         if (busy) {
             return;
         }
         String question = input.getText().trim();
         if (question.isEmpty()) {
+            return;
+        }
+        if (editBox.isSelected()) {
+            sendEdit(question);
             return;
         }
         historyLoadGeneration++;
@@ -1408,6 +1509,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         settingsButton.setText(I18n.t(language, "settings"));
         workspaceBox.setText(I18n.t(language, "askInWorkspace"));
+        editBox.setText(I18n.t(language, "editWorkspace"));
+        editBox.setToolTipText(I18n.t(language, "editWorkspaceHint"));
         updateWorkspaceTooltip();
         viewAttachmentButton.setText(I18n.t(language, "view"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));

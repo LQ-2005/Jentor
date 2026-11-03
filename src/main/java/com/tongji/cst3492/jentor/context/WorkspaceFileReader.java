@@ -5,6 +5,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.roots.ProjectFileIndex;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
@@ -67,6 +68,17 @@ public final class WorkspaceFileReader {
     private static boolean isUnderProjectDir(Project project, VirtualFile file) {
         VirtualFile base = ProjectUtil.guessProjectDir(project);
         return base != null && VfsUtilCore.isAncestor(base, file, false);
+    }
+
+    /** Resolves a project-relative path to a file, or {@code null}. */
+    public static VirtualFile resolve(Project project, String relativePath) {
+        String base = project == null ? null : project.getBasePath();
+        if (base == null || relativePath == null || relativePath.isBlank()) {
+            return null;
+        }
+        String normalizedBase = base.replace('\\', '/');
+        String normalizedPath = relativePath.replace('\\', '/');
+        return LocalFileSystem.getInstance().findFileByPath(normalizedBase + "/" + normalizedPath);
     }
 
     /** Package-visible so the index builder can reuse the same path rules. */

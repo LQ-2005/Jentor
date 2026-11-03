@@ -130,6 +130,13 @@ This is the F0 baseline required for every group.
   code and the question, so a stale or unrelated file cannot override a grounded
   answer. Every answer that used attached files ends with a footnote saying the
   code is a snapshot and may differ from the current file.
+- **Edit workspace code**: tick **Edit workspace code** in the composer, describe
+  the change ("extract the payment branches into a strategy", "fix the null check
+  in cancel"), and Jentor returns a complete rewritten file. The suggestion opens
+  in IntelliJ's built-in side-by-side diff; the left pane follows the file live
+  while the dialog is open, any edit to the file marks the suggestion stale and
+  disables **Apply**, and applying writes one undoable command. The model may also
+  answer `NO_CHANGE` or `REFUSE: <reason>` instead of a proposal.
 - Explicit selected code, attached files and the optional workspace outline share
   a hard 16,000-character IDE-context budget. Workspace content is marked as
   untrusted data so instructions embedded in source comments cannot override the
@@ -176,7 +183,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.5.0.zip
+build\distributions\jentor-1.7.0.zip
 ```
 
 Install it into IntelliJ:
@@ -203,6 +210,9 @@ In IntelliJ:
 8. To add a whole file, right-click it in the editor or in the Project View and
    choose **Attach File to Jentor**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
+9. To change code, tick **Edit workspace code**, make sure the target file is
+   attached or open in the editor, describe the change and send. Review the diff
+   and press **Apply** (undo with `Ctrl+Z`) or **Cancel**.
 9. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
    outline to every question; clear it to send course context only.
 10. Use **History** to reopen an earlier conversation, or **New chat** to start a

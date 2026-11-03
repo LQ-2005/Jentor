@@ -105,6 +105,28 @@ public final class I18n {
             case "sendHint" -> zh
                     ? "Enter 发送，Shift+Enter 换行"
                     : "Enter sends, Shift+Enter adds a new line";
+            case "editWorkspace" -> zh ? "修改工作区代码" : "Edit workspace code";
+            case "editWorkspaceHint" -> zh
+                    ? "下一次提问将被视为代码修改请求，先生成建议再打开 diff 审阅"
+                    : "The next question is treated as a code change: Jentor proposes it, then opens a diff to review";
+            case "editNoTarget" -> zh
+                    ? "请先附加一个工作区文件，或在编辑器中打开目标文件"
+                    : "Attach a workspace file first, or open the target file in the editor";
+            case "editGenerating" -> zh ? "正在生成修改建议…" : "Generating a suggested change...";
+            case "editNoChange" -> zh
+                    ? "当前文件已满足该要求（NO_CHANGE）"
+                    : "The file already satisfies the request (NO_CHANGE)";
+            case "editRefused" -> zh ? "模型拒绝修改：" : "The model refused the change: ";
+            case "editReviewTitle" -> zh ? "Jentor：审阅修改建议" : "Jentor: review suggested change";
+            case "editReviewCurrent" -> zh ? "当前文件" : "Current";
+            case "editReviewSuggested" -> zh ? "建议内容" : "Suggested";
+            case "editApply" -> zh ? "应用" : "Apply";
+            case "editReviewHint" -> zh
+                    ? "左侧会随文件修改实时刷新；确认后点击“应用”写入编辑器（可 Ctrl+Z 撤销）。"
+                    : "The left side follows the file live; press Apply to write it (Ctrl+Z undoes it).";
+            case "editStale" -> zh
+                    ? "源文件在审阅期间被修改，建议可能已过期，请取消后重新生成。"
+                    : "The source changed while reviewing; the suggestion may be stale. Cancel and regenerate.";
             default -> key;
         };
     }

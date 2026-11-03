@@ -2,7 +2,15 @@ package com.tongji.cst3492.jentor.service;
 
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
+import com.tongji.cst3492.jentor.llm.ChatClient;
+import com.tongji.cst3492.jentor.llm.EditPromptBuilder;
+import com.tongji.cst3492.jentor.llm.EditProposalParser;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.tongji.cst3492.jentor.index.Retriever;
 import com.tongji.cst3492.jentor.llm.Answer;
@@ -39,6 +47,8 @@ public final class CourseTaService {
     private volatile Retriever retriever;
     private volatile AnswerService realAnswerService;
     private volatile AnswerService mockAnswerService;
+    private volatile ChatClient realClient;
+    private volatile ChatClient mockClient;
     private volatile CourseIndex bundledIndex;
     private volatile CourseIndex importedIndex;
     private volatile long importedAtRevision = -1L;
@@ -231,15 +241,85 @@ public final class CourseTaService {
         return current;
     }
 
+    private ChatClient chatClient(boolean mock) {
+        ChatClient local = mock ? mockClient : realClient;
+        if (local == null) {
+            synchronized (this) {
+                local = mock ? mockClient : realClient;
+                if (local == null) {
+                    local = mock ? new MockChatClient() : new OpenAiCompatibleClient();
+                    if (mock) {
+                        mockClient = local;
+                    } else {
+                        realClient = local;
+                    }
+                }
+            }
+        }
+        return local;
+    }
+
+    /**
+     * Runs one edit request: reads the target file, asks for a complete new file
+     * and parses the reply. This never writes to disk; applying is a separate,
+     * user-approved step.
+     */
+    public CompletableFuture<EditProposalParser.Result> edit(
+            String instruction,
+            String path,
+            int startLine,
+            int endLine) {
+        CompletableFuture<EditProposalParser.Result> result = new CompletableFuture<>();
+        TaSettings settings = TaSettings.getInstance();
+        TaSettings.State state = settings.getState();
+        boolean mock = state.useMockModel;
+        String apiKey = settings.getApiKey();
+        if (!mock && (apiKey == null || apiKey.isBlank())) {
+            result.completeExceptionally(new IllegalStateException(
+                    "Configure the API key in Settings | Tools | CST3492 Course TA."));
+            return result;
+        }
+        LlmConfig config = mock
+                ? new LlmConfig("mock", "mock", "mock", 0.0, 256)
+                : new LlmConfig(state.baseUrl, apiKey, state.chatModel, state.temperature,
+                        state.maxTokens);
+        CancellationToken token = new CancellationToken();
+        AppExecutorUtil.getAppExecutorService().submit(() -> {
+            try {
+                token.throwIfCancelled();
+                VirtualFile file = WorkspaceFileReader.resolve(project, path);
+                if (file == null || !file.isValid()) {
+                    throw new IllegalStateException("File not found: " + path);
+                }
+                Document document = ReadAction.computeBlocking(
+                        () -> FileDocumentManager.getInstance().getDocument(file));
+                if (document == null) {
+                    throw new IllegalStateException("Not a text file: " + path);
+                }
+                long stamp = document.getModificationStamp();
+                String text = ReadAction.computeBlocking(() -> WorkspaceFileReader.textOf(file));
+                if (text == null) {
+                    throw new IllegalStateException("Cannot read the file: " + path);
+                }
+                List<ChatMessage> messages = new EditPromptBuilder().build(
+                        instruction, path, file.getFileType().getName(), text, startLine, endLine);
+                String reply = chatClient(mock).complete(config, messages, token);
+                token.throwIfCancelled();
+                result.complete(EditProposalParser.parse(reply, stamp, instruction));
+            } catch (Throwable error) {
+                result.completeExceptionally(error);
+            }
+        });
+        return result;
+    }
+
     private AnswerService getAnswerService(boolean mock) {
         AnswerService local = mock ? mockAnswerService : realAnswerService;
         if (local == null) {
             synchronized (this) {
                 local = mock ? mockAnswerService : realAnswerService;
                 if (local == null) {
-                    local = new AnswerService(
-                            getRetriever(),
-                            mock ? new MockChatClient() : new OpenAiCompatibleClient());
+                    local = new AnswerService(getRetriever(), chatClient(mock));
                     if (mock) {
                         mockAnswerService = local;
                     } else {

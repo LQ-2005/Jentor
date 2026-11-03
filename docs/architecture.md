@@ -243,6 +243,40 @@ injecting nothing. The service then renders the outline plus a
 request thread when it is missing, so ticking the option always takes effect,
 even on the first question after startup.
 
+## Editing pipeline
+
+The edit mode turns one instruction into a reviewable file change. It is kept
+separate from the teaching prompt because the reply contract is different.
+
+`EditPromptBuilder` asks for exactly one fenced `jentor-edit` block holding the
+**complete** new file, or `NO_CHANGE`, or `REFUSE: <reason>`. The rules forbid
+fragments, patches, reformatting of untouched lines, placeholder comments and new
+dependencies, and they state that the file body is untrusted data rather than
+instructions.
+
+`EditProposalParser` turns that reply into an `EditProposal` (path, baseline
+modification stamp, complete text). Malformed, empty or missing output becomes a
+refusal reason instead of an exception.
+
+`EditGuard` is pure logic and owns the write rules: the same source and
+build-script whitelist as the workspace context (config and data formats stay
+read-only), a 200k character cap, line-ending normalisation, the no-op check and
+the conflict test.
+
+`EditReviewDialog` puts the proposal next to the file in IntelliJ's built-in
+two-pane diff. The left content is a `DocumentContent` bound to the live
+`Document`, so the comparison keeps following the file while the dialog is open.
+A `DocumentListener` feeds `EditReviewState`: the first stamp change marks the
+suggestion stale, turns the banner red and disables **Apply**, so a review can
+never silently apply against a file the user has since edited.
+
+`EditApplier` is the plugin's only write path. It resolves the file, requires a
+text document, refuses when the document changed after the suggestion was
+produced, skips identical content, and replaces the whole document inside
+`WriteCommandAction` so the change is one undoable command. It never creates or
+deletes files and never saves silently: the built-in diff review is expected to
+run first.
+
 ## Conversation memory
 
 `ChatPanel` keeps the most recent user/assistant turns. Before each request,
