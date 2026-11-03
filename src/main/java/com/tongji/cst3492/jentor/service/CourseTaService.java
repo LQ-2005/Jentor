@@ -7,6 +7,7 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.llm.ChatClient;
 import com.tongji.cst3492.jentor.llm.EditPromptBuilder;
@@ -264,7 +265,7 @@ public final class CourseTaService {
      * and parses the reply. This never writes to disk; applying is a separate,
      * user-approved step.
      */
-    public CompletableFuture<EditProposalParser.Result> edit(
+    public EditRequest edit(
             String instruction,
             String path,
             int startLine,
@@ -275,21 +276,27 @@ public final class CourseTaService {
         boolean mock = state.useMockModel;
         String apiKey = settings.getApiKey();
         if (!mock && (apiKey == null || apiKey.isBlank())) {
-            result.completeExceptionally(new IllegalStateException(
-                    "Configure the API key in Settings | Tools | CST3492 Course TA."));
-            return result;
+            return EditRequest.failed(new IllegalStateException(
+                    "Configure the API key in Settings | Tools | Jentor."));
         }
         LlmConfig config = mock
                 ? new LlmConfig("mock", "mock", "mock", 0.0, 256)
                 : new LlmConfig(state.baseUrl, apiKey, state.chatModel, state.temperature,
                         state.maxTokens);
         CancellationToken token = new CancellationToken();
-        AppExecutorUtil.getAppExecutorService().submit(() -> {
+        Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
             try {
                 token.throwIfCancelled();
+                if (!EditGuard.isWritablePath(path)) {
+                    throw new IllegalStateException(
+                            "This file type cannot be edited: " + path);
+                }
                 VirtualFile file = WorkspaceFileReader.resolve(project, path);
                 if (file == null || !file.isValid()) {
                     throw new IllegalStateException("File not found: " + path);
+                }
+                if (!file.isWritable()) {
+                    throw new IllegalStateException("The file is read-only: " + path);
                 }
                 Document document = ReadAction.computeBlocking(
                         () -> FileDocumentManager.getInstance().getDocument(file));
@@ -301,16 +308,40 @@ public final class CourseTaService {
                 if (text == null) {
                     throw new IllegalStateException("Cannot read the file: " + path);
                 }
+                if (EditGuard.isTooLarge(text)) {
+                    throw new IllegalStateException(
+                            "The file is too large to rewrite safely: " + path);
+                }
+                if (startLine > 0
+                        && (endLine < startLine || endLine > document.getLineCount())) {
+                    throw new IllegalStateException(
+                            "The selected code range is no longer valid; select it again.");
+                }
                 List<ChatMessage> messages = new EditPromptBuilder().build(
                         instruction, path, file.getFileType().getName(), text, startLine, endLine);
                 String reply = chatClient(mock).complete(config, messages, token);
                 token.throwIfCancelled();
-                result.complete(EditProposalParser.parse(reply, stamp, instruction));
+                EditProposalParser.Result parsed =
+                        EditProposalParser.parse(reply, stamp, instruction);
+                if (parsed.hasProposal()) {
+                    String requestedPath = EditGuard.normalizeRelativePath(path);
+                    String proposedPath = EditGuard.normalizeRelativePath(parsed.proposal().path());
+                    if (requestedPath.isBlank() || !requestedPath.equals(proposedPath)) {
+                        result.complete(new EditProposalParser.Result(
+                                null,
+                                "the model tried to change a different file",
+                                false));
+                        return;
+                    }
+                }
+                result.complete(parsed);
+            } catch (CancellationException cancelled) {
+                result.cancel(false);
             } catch (Throwable error) {
                 result.completeExceptionally(error);
             }
         });
-        return result;
+        return new EditRequest(result, task, token);
     }
 
     private AnswerService getAnswerService(boolean mock) {

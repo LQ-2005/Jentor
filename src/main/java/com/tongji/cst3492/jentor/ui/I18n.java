@@ -109,9 +109,18 @@ public final class I18n {
             case "editWorkspaceHint" -> zh
                     ? "下一次提问将被视为代码修改请求，先生成建议再打开 diff 审阅"
                     : "The next question is treated as a code change: Jentor proposes it, then opens a diff to review";
+            case "editPrompt" -> zh
+                    ? "已进入代码修改模式，请输入希望执行的修改。"
+                    : "Code edit mode is ready. Describe the change you want.";
             case "editNoTarget" -> zh
                     ? "请先附加一个工作区文件，或在编辑器中打开目标文件"
                     : "Attach a workspace file first, or open the target file in the editor";
+            case "editMultipleTargets" -> zh
+                    ? "编辑模式一次只能附加一个目标文件，请移除多余附件后重试。"
+                    : "Edit mode supports one attached target file. Remove extra attachments and try again.";
+            case "editReadOnly" -> zh
+                    ? "目标文件为只读，无法应用修改："
+                    : "The target file is read-only and cannot be edited:";
             case "editGenerating" -> zh ? "正在生成修改建议…" : "Generating a suggested change...";
             case "editNoChange" -> zh
                     ? "当前文件已满足该要求（NO_CHANGE）"
@@ -127,6 +136,9 @@ public final class I18n {
             case "editStale" -> zh
                     ? "源文件在审阅期间被修改，建议可能已过期，请取消后重新生成。"
                     : "The source changed while reviewing; the suggestion may be stale. Cancel and regenerate.";
+            case "editSyntaxError" -> zh
+                    ? "建议的 Java 代码存在语法错误，无法应用："
+                    : "The suggested Java file has syntax errors and cannot be applied:";
             default -> key;
         };
     }

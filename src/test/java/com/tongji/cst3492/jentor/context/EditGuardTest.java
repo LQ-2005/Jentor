@@ -2,6 +2,7 @@ package com.tongji.cst3492.jentor.context;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,5 +38,24 @@ class EditGuardTest {
         assertFalse(EditGuard.isConflict(0L, 5L));
         assertFalse(EditGuard.isConflict(5L, 5L));
         assertTrue(EditGuard.isConflict(5L, 6L));
+    }
+
+    @Test
+    void rejectsAbsoluteAndParentTraversalPaths() {
+        assertEquals("src/main/java/demo/A.java",
+                EditGuard.normalizeRelativePath("src\\main\\java\\demo\\A.java"));
+        assertEquals("", EditGuard.normalizeRelativePath("../outside/A.java"));
+        assertEquals("", EditGuard.normalizeRelativePath("src/../../outside/A.java"));
+        assertEquals("", EditGuard.normalizeRelativePath("C:/outside/A.java"));
+        assertEquals("", EditGuard.normalizeRelativePath("/outside/A.java"));
+        assertFalse(EditGuard.isWritablePath("../outside/A.java"));
+    }
+
+    @Test
+    void preservesTheExistingLineSeparatorStyle() {
+        assertEquals("one\r\ntwo\r\n", EditGuard.preserveLineSeparators(
+                "old\r\ncontent\r\n", "one\ntwo\n"));
+        assertEquals("one\ntwo\n", EditGuard.preserveLineSeparators(
+                "old\ncontent\n", "one\ntwo\n"));
     }
 }

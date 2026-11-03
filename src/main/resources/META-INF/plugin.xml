@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.tongji.cst3492.jentor</id>
     <name>Jentor</name>
-    <version>1.7.0</version>
+    <version>1.7.1</version>
     <vendor>Tongji University</vendor>
 
     <description>
@@ -10,9 +10,10 @@
         lecture slides, answers questions with document and page citations, and can
         independently manage PDF, Office, text, web and image course materials from
         any folder, use structured tables and offline English/Chinese OCR, and attach
-        selected editor code or workspace source files to the conversation. Chats
-        are saved locally per project with new-chat, search, rename and delete
-        controls. Source files are never modified or deleted.
+        selected editor code or workspace source files to the conversation.
+        AI-suggested source edits are reviewed in IntelliJ's built-in diff and
+        applied only after approval. Chats are saved locally per project with
+        new-chat, search, rename and delete controls.
     </description>
 
     <idea-version since-build="252" until-build="262.*"/>
@@ -44,6 +45,14 @@
                 text="Ask Jentor about Selection"
                 description="Attach the selected code to the Jentor chat">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+        <action
+                id="Jentor.EditCode"
+                class="com.tongji.cst3492.jentor.action.EditCodeAction"
+                text="Edit Code with Jentor"
+                description="Preview an AI code change in IntelliJ's diff viewer">
+            <add-to-group group-id="EditorPopupMenu" anchor="after"
+                          relative-to-action="Jentor.AskSelection"/>
         </action>
         <action
                 id="Jentor.AttachFile"

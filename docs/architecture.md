@@ -256,7 +256,9 @@ instructions.
 
 `EditProposalParser` turns that reply into an `EditProposal` (path, baseline
 modification stamp, complete text). Malformed, empty or missing output becomes a
-refusal reason instead of an exception.
+refusal reason instead of an exception. The service requires the returned path to
+match the user-selected target; model output cannot redirect an edit to another
+file.
 
 `EditGuard` is pure logic and owns the write rules: the same source and
 build-script whitelist as the workspace context (config and data formats stay
@@ -271,11 +273,15 @@ suggestion stale, turns the banner red and disables **Apply**, so a review can
 never silently apply against a file the user has since edited.
 
 `EditApplier` is the plugin's only write path. It resolves the file, requires a
-text document, refuses when the document changed after the suggestion was
-produced, skips identical content, and replaces the whole document inside
-`WriteCommandAction` so the change is one undoable command. It never creates or
-deletes files and never saves silently: the built-in diff review is expected to
-run first.
+text document, rejects read-only files, refuses when the document changed after
+the suggestion was produced, skips identical content, validates Java PSI before
+writing, preserves the source file's line-separator style, and replaces the whole
+document inside `WriteCommandAction` so the change is one undoable command. It
+never creates or deletes files and never saves silently: the built-in diff review
+is expected to run first. Target selection binds a selection range only when the
+selected editor file is the same target; multiple attached targets are rejected.
+Edit requests expose a cancellation handle so the stop button cancels the token,
+task and HTTP request.
 
 ## Conversation memory
 

@@ -136,7 +136,11 @@ This is the F0 baseline required for every group.
   in IntelliJ's built-in side-by-side diff; the left pane follows the file live
   while the dialog is open, any edit to the file marks the suggestion stale and
   disables **Apply**, and applying writes one undoable command. The model may also
-  answer `NO_CHANGE` or `REFUSE: <reason>` instead of a proposal.
+  answer `NO_CHANGE` or `REFUSE: <reason>` instead of a proposal. The editor
+  context menu also provides **Edit Code with Jentor** to activate this mode
+  directly. Model-returned paths must match the selected target and remain inside
+  the project; multiple attached targets are rejected, and read-only or
+  syntactically invalid Java files cannot be applied.
 - Explicit selected code, attached files and the optional workspace outline share
   a hard 16,000-character IDE-context budget. Workspace content is marked as
   untrusted data so instructions embedded in source comments cannot override the
@@ -183,7 +187,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.7.0.zip
+build\distributions\jentor-1.7.1.zip
 ```
 
 Install it into IntelliJ:
@@ -210,12 +214,13 @@ In IntelliJ:
 8. To add a whole file, right-click it in the editor or in the Project View and
    choose **Attach File to Jentor**. The attachment bar shows how many files
    are attached; **Remove** detaches them again.
-9. To change code, tick **Edit workspace code**, make sure the target file is
-   attached or open in the editor, describe the change and send. Review the diff
-   and press **Apply** (undo with `Ctrl+Z`) or **Cancel**.
-9. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
+9. To change code, right-click **Edit Code with Jentor**, or tick
+   **Edit workspace code**, make sure exactly one target file is attached or open
+   in the editor, describe the change and send. Review the diff and press
+   **Apply** (undo with `Ctrl+Z`) or **Cancel**.
+10. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
    outline to every question; clear it to send course context only.
-10. Use **History** to reopen an earlier conversation, or **New chat** to start a
+11. Use **History** to reopen an earlier conversation, or **New chat** to start a
     separate conversation. Deleting history entries does not delete course files.
 
 To check the UI and citation path without an API key, open the settings and

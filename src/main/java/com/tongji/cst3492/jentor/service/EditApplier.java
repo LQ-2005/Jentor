@@ -40,6 +40,9 @@ public final class EditApplier {
         if (file == null || !file.isValid() || file.isDirectory()) {
             return EditApplyResult.notFound(proposal.path());
         }
+        if (!file.isWritable()) {
+            return EditApplyResult.refused("the file is read-only: " + proposal.path());
+        }
         Document document = FileDocumentManager.getInstance().getDocument(file);
         if (document == null) {
             return EditApplyResult.refused("not a text file: " + proposal.path());
@@ -48,9 +51,15 @@ public final class EditApplier {
             return EditApplyResult.conflict(
                     "the file changed after the suggestion was produced; review it again");
         }
-        String next = EditGuard.normalize(proposal.newText());
-        if (EditGuard.isNoOp(document.getText(), next)) {
+        String current = document.getText();
+        if (EditGuard.isNoOp(current, proposal.newText())) {
             return EditApplyResult.noChange(proposal.path());
+        }
+        String next = EditGuard.preserveLineSeparators(current, proposal.newText());
+        String syntaxError = JavaEditValidator.validationError(project, file, next);
+        if (!syntaxError.isBlank()) {
+            return EditApplyResult.refused(
+                    "the suggested Java file has syntax errors: " + syntaxError);
         }
         try {
             WriteCommandAction.writeCommandAction(project)

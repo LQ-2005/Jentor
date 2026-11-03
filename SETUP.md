@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.7.0.zip
+build/distributions/jentor-1.7.1.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,11 +147,20 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.7.0.zip`；
+3. 选择 `build/distributions/jentor-1.7.1.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
 ## 6. 配置模型
+
+使用 F2 代码修改：
+
+1. 在编辑器中选中代码，右键选择 `Edit Code with Jentor`；也可以勾选输入框下方的“修改工作区代码”；
+2. 编辑模式一次只能有一个附件目标；没有附件时使用当前编辑器文件；
+3. 输入修改要求并发送，等待插件生成完整文件建议；
+4. 在 IntelliJ 内置双栏 Diff 中审阅原始文件和建议文件；
+5. 点击“应用”写入编辑器，或取消保持文件不变；
+6. 应用后可使用 `Ctrl+Z` 撤销；文件只读、生成期间被修改或 Java 语法无效时禁止应用。
 
 管理历史对话：
 
@@ -250,7 +259,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.7.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.7.1 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -270,6 +279,11 @@ python tools/build_index.py `
 - [ ] 回答卡片只保留引用来源按钮，不再显示复制回答和检索候选
 - [ ] 输入框右键有剪切/复制/粘贴/全选
 - [ ] 中文输入法仍在组合候选词时，按 Enter 不会误发送消息
+- [ ] `Edit Code with Jentor` 会打开工具窗口并进入代码修改模式
+- [ ] 代码修改建议始终先在 IntelliJ 内置双栏 Diff 中显示
+- [ ] 取消 Diff 不会修改源码；应用后可按 `Ctrl+Z` 撤销
+- [ ] 生成期间停止按钮会取消编辑请求
+- [ ] 多附件目标、只读文件、路径越界和明显 Java 语法错误均无法应用
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制
 - [ ] 从不同目录添加 PDF 后，各资料独立显示并进入就绪状态

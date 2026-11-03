@@ -5,7 +5,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.roots.ProjectFileIndex;
-import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
@@ -72,13 +71,16 @@ public final class WorkspaceFileReader {
 
     /** Resolves a project-relative path to a file, or {@code null}. */
     public static VirtualFile resolve(Project project, String relativePath) {
-        String base = project == null ? null : project.getBasePath();
-        if (base == null || relativePath == null || relativePath.isBlank()) {
+        VirtualFile base = project == null ? null : ProjectUtil.guessProjectDir(project);
+        String safePath = EditGuard.normalizeRelativePath(relativePath);
+        if (base == null || safePath.isBlank()) {
             return null;
         }
-        String normalizedBase = base.replace('\\', '/');
-        String normalizedPath = relativePath.replace('\\', '/');
-        return LocalFileSystem.getInstance().findFileByPath(normalizedBase + "/" + normalizedPath);
+        VirtualFile resolved = base.findFileByRelativePath(safePath);
+        if (resolved == null || !VfsUtilCore.isAncestor(base, resolved, false)) {
+            return null;
+        }
+        return resolved;
     }
 
     /** Package-visible so the index builder can reuse the same path rules. */

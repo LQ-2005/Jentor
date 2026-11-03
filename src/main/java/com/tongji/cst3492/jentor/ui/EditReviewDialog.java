@@ -20,6 +20,7 @@ import com.tongji.cst3492.jentor.model.EditProposal;
 import com.tongji.cst3492.jentor.model.EditReviewState;
 import com.tongji.cst3492.jentor.service.EditApplier;
 import com.tongji.cst3492.jentor.service.EditApplyResult;
+import com.tongji.cst3492.jentor.service.JavaEditValidator;
 import com.tongji.cst3492.jentor.settings.TaSettings;
 import org.jetbrains.annotations.NotNull;
 
@@ -43,6 +44,7 @@ public final class EditReviewDialog extends DialogWrapper implements Disposable 
     private final String proposedText;
     private final String instruction;
     private final EditReviewState state;
+    private final String syntaxError;
     private final JBLabel banner = new JBLabel();
 
     private final DocumentListener monitor = new DocumentListener() {
@@ -67,6 +69,7 @@ public final class EditReviewDialog extends DialogWrapper implements Disposable 
         this.proposedText = proposedText;
         this.instruction = instruction;
         this.state = new EditReviewState(document.getModificationStamp());
+        this.syntaxError = JavaEditValidator.validationError(project, file, proposedText);
         setTitle(I18n.t(language(), "editReviewTitle"));
         setOKButtonText(I18n.t(language(), "editApply"));
         init();
@@ -123,12 +126,17 @@ public final class EditReviewDialog extends DialogWrapper implements Disposable 
 
     private void updateBanner() {
         boolean stale = state.isStale();
-        banner.setForeground(stale ? JBColor.RED : JBColor.GRAY);
-        banner.setText(stale
-                ? I18n.t(language(), "editStale")
-                : "<html>" + escape(instruction) + "<br/>"
-                        + I18n.t(language(), "editReviewHint") + "</html>");
-        getOKAction().setEnabled(!stale);
+        boolean invalid = !syntaxError.isBlank();
+        banner.setForeground(stale || invalid ? JBColor.RED : JBColor.GRAY);
+        if (stale) {
+            banner.setText(I18n.t(language(), "editStale"));
+        } else if (invalid) {
+            banner.setText(I18n.t(language(), "editSyntaxError") + " " + syntaxError);
+        } else {
+            banner.setText("<html>" + escape(instruction) + "<br/>"
+                    + I18n.t(language(), "editReviewHint") + "</html>");
+        }
+        getOKAction().setEnabled(!stale && !invalid);
     }
 
     @Override
