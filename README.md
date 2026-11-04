@@ -186,7 +186,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.8.0.zip
+build\distributions\jentor-1.8.1.zip
 ```
 
 Install it into IntelliJ:
