@@ -15,8 +15,9 @@ public final class CodeEditIntent {
             "能帮", "can you", "could you", "please");
     private static final List<String> ADOPTION_PHRASES = List.of(
             "修", "修吧", "都修", "全修", "改吧", "按这个改", "就按这个改",
-            "采纳", "采纳第", "修复第", "修第", "第二个",
-            "可以", "好的", "好", "执行", "开始修改", "fix it", "do it",
+            "都改", "全部修", "全部改", "按你说的", "按你刚才", "按上面",
+            "采纳", "采纳第", "修复第", "修第", "第一个", "第二个",
+            "执行", "开始修改", "fix it", "do it",
             "apply it", "go ahead");
 
     private CodeEditIntent() {
@@ -42,11 +43,20 @@ public final class CodeEditIntent {
     }
 
     public static boolean isAdoption(String question, String previousAssistantAnswer) {
-        if (previousAssistantAnswer == null || previousAssistantAnswer.isBlank()) {
+        if (!hasActionableAdvice(previousAssistantAnswer)) {
             return false;
         }
-        String advice = normalized(previousAssistantAnswer);
-        boolean actionable = advice.contains("建议")
+        String text = normalized(question);
+        return ADOPTION_PHRASES.stream().anyMatch(phrase ->
+                text.equals(phrase) || (phrase.length() > 1 && text.contains(phrase)));
+    }
+
+    public static boolean hasActionableAdvice(String assistantAnswer) {
+        if (assistantAnswer == null || assistantAnswer.isBlank()) {
+            return false;
+        }
+        String advice = normalized(assistantAnswer);
+        return advice.contains("建议")
                 || advice.contains("可以改")
                 || advice.contains("应该")
                 || advice.contains("修复")
@@ -58,12 +68,6 @@ public final class CodeEditIntent {
                 || advice.contains("issue")
                 || advice.contains("refactor")
                 || advice.contains("fix");
-        if (!actionable) {
-            return false;
-        }
-        String text = normalized(question);
-        return ADOPTION_PHRASES.stream().anyMatch(phrase ->
-                text.equals(phrase) || (phrase.length() > 1 && text.startsWith(phrase)));
     }
 
     private static boolean isInterrogative(String text) {

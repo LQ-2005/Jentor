@@ -535,9 +535,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void sendEdit(String visibleInstruction, EditTarget target, String assistantAdvice) {
         String modelInstruction = visibleInstruction;
         if (assistantAdvice != null && !assistantAdvice.isBlank()) {
-            modelInstruction = visibleInstruction
-                    + "\n\nApply the code changes suggested by your previous analysis:\n"
-                    + assistantAdvice;
+            modelInstruction = "Latest user request:\n"
+                    + visibleInstruction
+                    + "\n\nEarlier assistant analysis (context only; the latest user request wins):\n"
+                    + assistantAdvice
+                    + "\n\nIf the latest request adopts that analysis, apply every actionable "
+                    + "fix from it to the selected file.";
         }
         pendingEditTargetPath = null;
         pendingCodeEditRequested = false;
@@ -672,6 +675,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             return;
         }
         String assistantAdvice = lastAssistantTextForIntent;
+        String actionableAdvice = CodeEditIntent.hasActionableAdvice(assistantAdvice)
+                ? assistantAdvice : "";
         boolean adoptsSuggestion =
                 CodeEditIntent.isAdoption(question, assistantAdvice);
         boolean editRequest = pendingCodeEditRequested
@@ -679,10 +684,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 || CodeEditIntent.isDirectEditRequest(question);
         if (editRequest) {
             EditTarget target = resolveEditTarget(
-                    question, adoptsSuggestion ? assistantAdvice : "");
+                    question, actionableAdvice);
             if (target != null) {
                 historyLoadGeneration++;
-                sendEdit(question, target, adoptsSuggestion ? assistantAdvice : "");
+                sendEdit(question, target, actionableAdvice);
                 return;
             }
             pendingCodeEditRequested = false;

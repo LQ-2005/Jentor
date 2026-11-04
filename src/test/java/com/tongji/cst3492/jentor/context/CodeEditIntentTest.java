@@ -27,6 +27,9 @@ class CodeEditIntentTest {
     void recognizesAdoptionOnlyAfterAnAssistantSuggestion() {
         assertTrue(CodeEditIntent.isAdoption("都修吧", "建议修复 cancelOrder 和 findOrder"));
         assertTrue(CodeEditIntent.isAdoption("按这个改", "建议使用策略模式"));
+        assertTrue(CodeEditIntent.isAdoption(
+                "那就按你说的都修改",
+                "建议修复 cancelOrder、findOrder 和 paymentFee"));
         assertFalse(CodeEditIntent.isAdoption("都修吧", ""));
         assertFalse(CodeEditIntent.isAdoption("继续解释", "建议修复两个方法"));
         assertFalse(CodeEditIntent.isAdoption("好的", "我是 Jentor，你的课程助教。"));
