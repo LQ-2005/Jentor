@@ -139,9 +139,20 @@ public final class I18n {
             case "editReviewCurrent" -> zh ? "当前文件" : "Current";
             case "editReviewSuggested" -> zh ? "建议内容" : "Suggested";
             case "editApply" -> zh ? "应用" : "Apply";
+            case "editApplyAll" -> zh ? "应用全部" : "Apply all";
             case "editReviewHint" -> zh
                     ? "左侧会随文件修改实时刷新；确认后点击“应用”写入编辑器（可 Ctrl+Z 撤销）。"
                     : "The left side follows the file live; press Apply to write it (Ctrl+Z undoes it).";
+            case "editBatchHint" -> zh
+                    ? "每个标签页都使用 IntelliJ 内置双栏 Diff；确认后点击“应用全部”（可 Ctrl+Z 撤销）。"
+                    : "Each tab uses IntelliJ's built-in two-pane diff; press Apply all after review (Ctrl+Z undoes it).";
+            case "editBatchStale" -> zh
+                    ? "至少一个源文件在审阅期间发生变化，整批修改已禁用，请取消后重新生成。"
+                    : "At least one source changed during review. The batch is disabled; cancel and regenerate.";
+            case "editBatchInvalid" -> zh
+                    ? "至少一个文件不可审阅或存在 Java 语法错误，无法应用整批修改。"
+                    : "At least one file cannot be reviewed or contains a Java syntax error. The batch cannot be applied.";
+            case "editSkippedFiles" -> zh ? "已跳过：" : "Skipped:";
             case "editStale" -> zh
                     ? "源文件在审阅期间被修改，建议可能已过期，请取消后重新生成。"
                     : "The source changed while reviewing; the suggestion may be stale. Cancel and regenerate.";

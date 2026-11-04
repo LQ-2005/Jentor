@@ -1,19 +1,19 @@
 package com.tongji.cst3492.jentor.service;
 
 import com.tongji.cst3492.jentor.llm.CancellationToken;
-import com.tongji.cst3492.jentor.llm.EditProposalParser;
+import com.tongji.cst3492.jentor.model.EditBatchResult;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-/** Cancellable background request for one AI code-edit proposal. */
-public final class EditRequest {
-    private final CompletableFuture<EditProposalParser.Result> future;
+/** Cancellable request that plans and generates all proposals for one edit request. */
+public final class EditBatchRequest {
+    private final CompletableFuture<EditBatchResult> future;
     private final Future<?> task;
     private final CancellationToken token;
 
-    public EditRequest(
-            CompletableFuture<EditProposalParser.Result> future,
+    public EditBatchRequest(
+            CompletableFuture<EditBatchResult> future,
             Future<?> task,
             CancellationToken token) {
         this.future = future;
@@ -21,12 +21,12 @@ public final class EditRequest {
         this.token = token;
     }
 
-    public static EditRequest failed(Throwable error) {
-        return new EditRequest(
+    public static EditBatchRequest failed(Throwable error) {
+        return new EditBatchRequest(
                 CompletableFuture.failedFuture(error), null, new CancellationToken());
     }
 
-    public CompletableFuture<EditProposalParser.Result> future() {
+    public CompletableFuture<EditBatchResult> future() {
         return future;
     }
 

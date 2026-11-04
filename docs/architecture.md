@@ -252,10 +252,7 @@ edit-mode switch and no requirement to attach a target file.
 
 `EditTargetResolver` combines the active editor, selected code, the latest
 assistant analysis, target hints from the semantic router, and the workspace
-outline to find the likely target. If a model refusal names another `.java` file
-that exists in the workspace, the request relocates once and retries
-automatically; the user still sees the file name in the conversation and must
-approve the resulting diff.
+outline to provide a fallback target for mock planning.
 
 Online intent selection now uses a dedicated LLM router rather than the removed
 keyword classifier. `IntentPromptBuilder` supplies recent messages, pending
@@ -264,6 +261,11 @@ analysis, the latest applied edit, active file/selection and workspace file hint
 `CLARIFY` with confidence and optional target hints. Low-confidence or malformed
 routes become clarification requests. Mock mode uses a deterministic local router
 only for offline testing.
+
+`EditPlanPromptBuilder` runs before code generation and asks for a bounded JSON
+plan containing the relevant writable files, per-file instructions and explicit
+skipped files. The service validates every path, excluding read-only or unsafe
+files, and then runs `EditPromptBuilder` separately for each planned file.
 
 `EditPromptBuilder` asks for exactly one fenced `jentor-edit` block holding the
 **complete** new file, or `NO_CHANGE`, or `REFUSE: <reason>`. The rules forbid
@@ -282,22 +284,19 @@ build-script whitelist as the workspace context (config and data formats stay
 read-only), a 200k character cap, line-ending normalisation, the no-op check and
 the conflict test.
 
-`EditReviewDialog` puts the proposal next to the file in IntelliJ's built-in
-two-pane diff. The left content is a `DocumentContent` bound to the live
-`Document`, so the comparison keeps following the file while the dialog is open.
-A `DocumentListener` feeds `EditReviewState`: the first stamp change marks the
-suggestion stale, turns the banner red and disables **Apply**, so a review can
-never silently apply against a file the user has since edited.
+`EditBatchReviewDialog` puts every proposal in its own tab using IntelliJ's
+built-in two-pane diff. Left content is bound to the live `Document`, so the
+comparison follows edits while the dialog is open. A `DocumentListener` feeds an
+`EditReviewState` per file; any stale or invalid member disables **Apply all**, so
+review can never silently apply a partial or outdated batch.
 
-`EditApplier` is the plugin's only write path. It resolves the file, requires a
-text document, rejects read-only files, refuses when the document changed after
-the suggestion was produced, skips identical content, validates Java PSI before
-writing, preserves the source file's line-separator style, and replaces the whole
-document inside `WriteCommandAction` so the change is one undoable command. It
-never creates or deletes files and never saves silently: the built-in diff review
-is expected to run first. A selection range is used only when it belongs to the
-resolved target. Edit requests expose a cancellation handle so the stop button
-cancels the token, task and HTTP request.
+`EditApplier.applyAll` is the batch write path. It preflights every proposal for
+path safety, writability, source-file conflicts, Java syntax, no-op content and
+line-separator preservation before replacing any document. All writes then run
+under one `WriteCommandAction`, so one failed preflight prevents partial changes.
+It never creates or deletes files and never saves silently. Edit batch requests
+expose a cancellation handle so the stop button cancels the planner and all
+file-generation calls.
 
 ## Conversation memory
 

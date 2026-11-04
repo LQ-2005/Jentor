@@ -140,6 +140,12 @@ This is the F0 baseline required for every group.
   automatically. Every proposal still opens in IntelliJ's built-in side-by-side
   diff; applying is one undoable command, stale suggestions are disabled, and
   read-only or syntactically invalid Java files cannot be written.
+- Multi-file edits are planned before any code is generated. The planner selects
+  only the relevant workspace files, records read-only or invalid exclusions,
+  and produces file-specific instructions. Jentor validates every proposal and
+  shows one review window with a native two-pane diff tab per file.
+  **Apply all** preflights the whole batch and writes it as one undoable command;
+  one stale or invalid file prevents partial writes.
 - Each normal message first goes through an LLM semantic router that returns
   `CHAT`, `ANALYZE`, `EDIT`, `STATUS`, or `CLARIFY`. It uses recent conversation,
   pending analysis, the active editor, selection and workspace file hints rather
@@ -192,7 +198,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.9.0.zip
+build\distributions\jentor-2.0.0.zip
 ```
 
 Install it into IntelliJ:
@@ -221,8 +227,9 @@ In IntelliJ:
    are attached; **Remove** detaches them again.
 9. To change code, ask naturally, for example "修复 OrderService 的
    cancelOrder 空指针". You can also right-click **Edit Code with Jentor** as an
-   optional shortcut. Jentor locates the likely workspace target automatically.
-   Review the diff and press **Apply** (undo with `Ctrl+Z`) or **Cancel**.
+   optional shortcut. Jentor plans the relevant workspace files, shows skipped
+   read-only files, and opens one native diff tab per changed file. Review the
+   batch and press **Apply all** (undo with `Ctrl+Z`) or **Cancel**.
 10. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
    outline to every question; clear it to send course context only.
 11. Use **History** to reopen an earlier conversation, or **New chat** to start a

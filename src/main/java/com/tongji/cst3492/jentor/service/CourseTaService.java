@@ -8,9 +8,12 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.context.EditGuard;
+import com.tongji.cst3492.jentor.context.EditTargetResolver;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.llm.ChatClient;
 import com.tongji.cst3492.jentor.llm.EditPromptBuilder;
+import com.tongji.cst3492.jentor.llm.EditPlanParser;
+import com.tongji.cst3492.jentor.llm.EditPlanPromptBuilder;
 import com.tongji.cst3492.jentor.llm.EditProposalParser;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.tongji.cst3492.jentor.index.Retriever;
@@ -30,7 +33,13 @@ import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.CourseIndex;
 import com.tongji.cst3492.jentor.model.DocumentMeta;
+import com.tongji.cst3492.jentor.model.EditBatchResult;
+import com.tongji.cst3492.jentor.model.EditPlan;
+import com.tongji.cst3492.jentor.model.EditPlanEntry;
+import com.tongji.cst3492.jentor.model.SkippedEditFile;
 import com.tongji.cst3492.jentor.model.WorkspaceContext;
+import com.tongji.cst3492.jentor.model.WorkspaceIndex;
+import com.tongji.cst3492.jentor.model.WorkspaceOutline;
 import com.tongji.cst3492.jentor.settings.TaSettings;
 
 import java.io.IOException;
@@ -38,7 +47,10 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CancellationException;
@@ -326,87 +338,192 @@ public final class CourseTaService {
     }
 
     /**
-     * Runs one edit request: reads the target file, asks for a complete new file
-     * and parses the reply. This never writes to disk; applying is a separate,
-     * user-approved step.
+     * Plans all affected files, then generates one complete-file proposal per
+     * writable target. The plan and all proposals are produced off the EDT.
      */
-    public EditRequest edit(
-            String instruction,
-            String path,
-            int startLine,
-            int endLine) {
-        CompletableFuture<EditProposalParser.Result> result = new CompletableFuture<>();
+    public EditBatchRequest prepareEditBatch(
+            String question,
+            String previousAnalysis,
+            String forcedTarget,
+            List<String> targetHints,
+            String activeFile,
+            String language) {
         TaSettings settings = TaSettings.getInstance();
         TaSettings.State state = settings.getState();
         boolean mock = state.useMockModel;
         String apiKey = settings.getApiKey();
         if (!mock && (apiKey == null || apiKey.isBlank())) {
-            return EditRequest.failed(new IllegalStateException(
+            return EditBatchRequest.failed(new IllegalStateException(
                     "Configure the API key in Settings | Tools | Jentor."));
         }
-        LlmConfig config = mock
+        LlmConfig editConfig = mock
                 ? new LlmConfig("mock", "mock", "mock", 0.0, 256)
-                : new LlmConfig(state.baseUrl, apiKey, state.chatModel, state.temperature,
-                        state.maxTokens);
+                : new LlmConfig(state.baseUrl, apiKey, state.chatModel,
+                state.temperature, state.maxTokens);
+        LlmConfig planConfig = mock ? editConfig : new LlmConfig(
+                state.baseUrl, apiKey, state.chatModel, 0.0,
+                Math.max(256, Math.min(1_000, state.maxTokens)));
+        CompletableFuture<EditBatchResult> result = new CompletableFuture<>();
         CancellationToken token = new CancellationToken();
         Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
             try {
                 token.throwIfCancelled();
-                if (!EditGuard.isWritablePath(path)) {
-                    throw new IllegalStateException(
-                            "This file type cannot be edited: " + path);
+                WorkspaceIndexService indexService =
+                        project.getService(WorkspaceIndexService.class);
+                WorkspaceIndex index = indexService == null ? null : indexService.getIndex();
+                if (index == null && indexService != null) {
+                    indexService.contextForBlocking(question);
+                    index = indexService.getIndex();
                 }
-                VirtualFile file = WorkspaceFileReader.resolve(project, path);
-                if (file == null || !file.isValid()) {
-                    throw new IllegalStateException("File not found: " + path);
-                }
-                if (!file.isWritable()) {
-                    throw new IllegalStateException("The file is read-only: " + path);
-                }
-                Document document = ReadAction.computeBlocking(
-                        () -> FileDocumentManager.getInstance().getDocument(file));
-                if (document == null) {
-                    throw new IllegalStateException("Not a text file: " + path);
-                }
-                long stamp = document.getModificationStamp();
-                String text = ReadAction.computeBlocking(() -> WorkspaceFileReader.textOf(file));
-                if (text == null) {
-                    throw new IllegalStateException("Cannot read the file: " + path);
-                }
-                if (EditGuard.isTooLarge(text)) {
-                    throw new IllegalStateException(
-                            "The file is too large to rewrite safely: " + path);
-                }
-                if (startLine > 0
-                        && (endLine < startLine || endLine > document.getLineCount())) {
-                    throw new IllegalStateException(
-                            "The selected code range is no longer valid; select it again.");
-                }
-                List<ChatMessage> messages = new EditPromptBuilder().build(
-                        instruction, path, file.getFileType().getName(), text, startLine, endLine);
-                String reply = chatClient(mock).complete(config, messages, token);
-                token.throwIfCancelled();
-                EditProposalParser.Result parsed =
-                        EditProposalParser.parse(reply, stamp, instruction);
-                if (parsed.hasProposal()) {
-                    String requestedPath = EditGuard.normalizeRelativePath(path);
-                    String proposedPath = EditGuard.normalizeRelativePath(parsed.proposal().path());
-                    if (requestedPath.isBlank() || !requestedPath.equals(proposedPath)) {
-                        result.complete(new EditProposalParser.Result(
-                                null,
-                                "the model tried to change a different file: " + proposedPath,
-                                false));
+                String signal = question + "\n" + (previousAnalysis == null ? "" : previousAnalysis)
+                        + "\n" + String.join(" ", targetHints == null ? List.of() : targetHints);
+                List<WorkspaceOutline> candidates = candidates(index, signal);
+                EditPlan plan;
+                if (mock || forcedTarget != null && !forcedTarget.isBlank()) {
+                    String target = EditGuard.normalizeRelativePath(
+                            forcedTarget == null || forcedTarget.isBlank()
+                                    ? EditTargetResolver.pick(index, activeFile, signal, "")
+                                    : forcedTarget);
+                    if (target.isBlank()) {
+                        result.complete(new EditBatchResult(
+                                "", List.of(), List.of(),
+                                language != null && "zh".equals(language)
+                                        ? "我还不能确定要修改哪个文件。"
+                                        : "I cannot determine which file to change."));
                         return;
                     }
+                    plan = new EditPlan(
+                            "Planned code change",
+                            List.of(new EditPlanEntry(
+                                    target,
+                                    question + "\n"
+                                            + (previousAnalysis == null ? "" : previousAnalysis))),
+                            List.of(),
+                            "");
+                } else {
+                    List<ChatMessage> plannerMessages = new EditPlanPromptBuilder().build(
+                            question, previousAnalysis, activeFile, candidates, language);
+                    String plannerReply = chatClient(false).complete(
+                            planConfig, plannerMessages, token);
+                    token.throwIfCancelled();
+                    plan = EditPlanParser.parse(plannerReply);
                 }
-                result.complete(parsed);
+
+                Map<String, String> skipped = new LinkedHashMap<>();
+                for (SkippedEditFile skippedFile : plan.skipped()) {
+                    if (!skippedFile.path().isBlank()) {
+                        skipped.put(skippedFile.path(), skippedFile.reason());
+                    }
+                }
+                List<com.tongji.cst3492.jentor.model.EditProposal> proposals =
+                        new ArrayList<>();
+                Map<String, String> seen = new LinkedHashMap<>();
+                for (EditPlanEntry planned : plan.files()) {
+                    token.throwIfCancelled();
+                    String path = EditGuard.normalizeRelativePath(planned.path());
+                    if (path.isBlank() || seen.putIfAbsent(path, path) != null) {
+                        continue;
+                    }
+                    if (!EditGuard.isWritablePath(path)) {
+                        skipped.putIfAbsent(path, "unsupported or unsafe file path");
+                        continue;
+                    }
+                    VirtualFile file = WorkspaceFileReader.resolve(project, path);
+                    if (file == null || !file.isValid() || file.isDirectory()) {
+                        skipped.putIfAbsent(path, "file not found");
+                        continue;
+                    }
+                    if (!file.isWritable()) {
+                        skipped.putIfAbsent(path, "read-only file");
+                        continue;
+                    }
+                    Document document = ReadAction.computeBlocking(
+                            () -> FileDocumentManager.getInstance().getDocument(file));
+                    if (document == null) {
+                        skipped.putIfAbsent(path, "not a text file");
+                        continue;
+                    }
+                    String text = ReadAction.computeBlocking(() -> WorkspaceFileReader.textOf(file));
+                    if (text == null) {
+                        skipped.putIfAbsent(path, "cannot read file");
+                        continue;
+                    }
+                    if (EditGuard.isTooLarge(text)) {
+                        skipped.putIfAbsent(path, "file is too large to rewrite safely");
+                        continue;
+                    }
+                    String instruction = question
+                            + "\n\nPrevious analysis:\n"
+                            + (previousAnalysis == null ? "" : previousAnalysis)
+                            + "\n\nPlanned changes for this file:\n"
+                            + planned.instruction();
+                    List<ChatMessage> editMessages = new EditPromptBuilder().build(
+                            instruction,
+                            path,
+                            file.getFileType().getName(),
+                            text,
+                            0,
+                            0);
+                    String reply = chatClient(mock).complete(editConfig, editMessages, token);
+                    token.throwIfCancelled();
+                    EditProposalParser.Result parsed = EditProposalParser.parse(
+                            reply, document.getModificationStamp(), instruction);
+                    if (!parsed.hasProposal()) {
+                        skipped.putIfAbsent(path,
+                                parsed.noChange()
+                                        ? "no change required" : parsed.refusal());
+                        continue;
+                    }
+                    if (!path.equals(EditGuard.normalizeRelativePath(
+                            parsed.proposal().path()))) {
+                        skipped.putIfAbsent(path,
+                                "model returned a different target file");
+                        continue;
+                    }
+                    proposals.add(parsed.proposal());
+                }
+                List<SkippedEditFile> skippedFiles = skipped.entrySet().stream()
+                        .map(entry -> new SkippedEditFile(entry.getKey(), entry.getValue()))
+                        .toList();
+                String error = "";
+                if (proposals.isEmpty()) {
+                    if (!plan.clarification().isBlank()) {
+                        error = plan.clarification();
+                    } else {
+                        StringBuilder message = new StringBuilder(
+                                language != null && "zh".equals(language)
+                                        ? "没有可写入的修改建议。"
+                                        : "No writable edit proposals were generated.");
+                        for (SkippedEditFile skippedFile : skippedFiles) {
+                            message.append("\n- ").append(skippedFile.path());
+                            if (!skippedFile.reason().isBlank()) {
+                                message.append(": ").append(skippedFile.reason());
+                            }
+                        }
+                        error = message.toString();
+                    }
+                }
+                result.complete(new EditBatchResult(
+                        plan.summary().isBlank() ? question : plan.summary(),
+                        proposals,
+                        skippedFiles,
+                        error));
             } catch (CancellationException cancelled) {
                 result.cancel(false);
             } catch (Throwable error) {
                 result.completeExceptionally(error);
             }
         });
-        return new EditRequest(result, task, token);
+        return new EditBatchRequest(result, task, token);
+    }
+
+    private List<WorkspaceOutline> candidates(WorkspaceIndex index, String signal) {
+        if (index == null || index.files().isEmpty()) {
+            return List.of();
+        }
+        var ranking = com.tongji.cst3492.jentor.context.WorkspaceOutlineSelector
+                .rank(index, signal, 40);
+        return ranking.files();
     }
 
     private AnswerService getAnswerService(boolean mock) {
