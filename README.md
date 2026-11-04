@@ -140,6 +140,12 @@ This is the F0 baseline required for every group.
   automatically. Every proposal still opens in IntelliJ's built-in side-by-side
   diff; applying is one undoable command, stale suggestions are disabled, and
   read-only or syntactically invalid Java files cannot be written.
+- Each normal message first goes through an LLM semantic router that returns
+  `CHAT`, `ANALYZE`, `EDIT`, `STATUS`, or `CLARIFY`. It uses recent conversation,
+  pending analysis, the active editor, selection and workspace file hints rather
+  than matching fixed keywords. Status questions such as "修改了哪些？" therefore
+  answer from the latest applied edit instead of starting another edit. Mock mode
+  uses a deterministic offline router only for tests and demonstration.
 - Explicit selected code, attached files and the optional workspace outline share
   a hard 16,000-character IDE-context budget. Workspace content is marked as
   untrusted data so instructions embedded in source comments cannot override the
@@ -186,7 +192,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-1.8.1.zip
+build\distributions\jentor-1.9.0.zip
 ```
 
 Install it into IntelliJ:

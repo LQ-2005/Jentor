@@ -46,6 +46,7 @@ public final class EditReviewDialog extends DialogWrapper implements Disposable 
     private final EditReviewState state;
     private final String syntaxError;
     private final JBLabel banner = new JBLabel();
+    private EditApplyResult applyResult;
 
     private final DocumentListener monitor = new DocumentListener() {
         @Override
@@ -117,11 +118,16 @@ public final class EditReviewDialog extends DialogWrapper implements Disposable 
         }
         EditApplyResult result = EditApplier.apply(project,
                 new EditProposal(path, state.baseModificationStamp(), proposedText, instruction));
+        applyResult = result;
         if (result.isApplied() || result.status() == EditApplyResult.Status.NO_CHANGE) {
             super.doOKAction();
             return;
         }
         setErrorText(result.status() + ": " + result.message());
+    }
+
+    public EditApplyResult applyResult() {
+        return applyResult;
     }
 
     private void updateBanner() {

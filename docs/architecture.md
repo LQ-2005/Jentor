@@ -250,13 +250,20 @@ change when the intent indicates modification. It is kept separate from the
 teaching prompt because the reply contract is different. There is no persistent
 edit-mode switch and no requirement to attach a target file.
 
-`CodeEditIntent` recognizes direct modification requests and short adoption
-phrases such as "fix it". `EditTargetResolver` combines the active editor,
-selected code, the latest assistant analysis, and the workspace outline to find
-the likely target. If a model refusal names another `.java` file that exists in
-the workspace, the request relocates once and retries automatically; the user
-still sees the file name in the conversation and must approve the resulting
-diff.
+`EditTargetResolver` combines the active editor, selected code, the latest
+assistant analysis, target hints from the semantic router, and the workspace
+outline to find the likely target. If a model refusal names another `.java` file
+that exists in the workspace, the request relocates once and retries
+automatically; the user still sees the file name in the conversation and must
+approve the resulting diff.
+
+Online intent selection now uses a dedicated LLM router rather than the removed
+keyword classifier. `IntentPromptBuilder` supplies recent messages, pending
+analysis, the latest applied edit, active file/selection and workspace file hints.
+`IntentDecisionParser` accepts only `CHAT`, `ANALYZE`, `EDIT`, `STATUS` or
+`CLARIFY` with confidence and optional target hints. Low-confidence or malformed
+routes become clarification requests. Mock mode uses a deterministic local router
+only for offline testing.
 
 `EditPromptBuilder` asks for exactly one fenced `jentor-edit` block holding the
 **complete** new file, or `NO_CHANGE`, or `REFUSE: <reason>`. The rules forbid

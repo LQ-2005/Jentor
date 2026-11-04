@@ -29,12 +29,13 @@ import com.tongji.cst3492.jentor.llm.CitationStatus;
 import com.tongji.cst3492.jentor.llm.PromptBuilder;
 import com.tongji.cst3492.jentor.llm.StreamSink;
 import com.tongji.cst3492.jentor.context.CodeFilePolicy;
-import com.tongji.cst3492.jentor.context.CodeEditIntent;
 import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.EditRefusalTarget;
 import com.tongji.cst3492.jentor.context.EditTarget;
 import com.tongji.cst3492.jentor.context.EditTargetResolver;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
+import com.tongji.cst3492.jentor.intent.ConversationIntent;
+import com.tongji.cst3492.jentor.intent.RouteDecision;
 import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.CourseDocumentSource;
@@ -43,7 +44,9 @@ import com.tongji.cst3492.jentor.model.SourceReference;
 import com.tongji.cst3492.jentor.model.WorkspaceIndex;
 import com.tongji.cst3492.jentor.service.ChatRequest;
 import com.tongji.cst3492.jentor.service.CourseTaService;
+import com.tongji.cst3492.jentor.service.EditApplyResult;
 import com.tongji.cst3492.jentor.service.EditRequest;
+import com.tongji.cst3492.jentor.service.IntentRequest;
 import com.tongji.cst3492.jentor.service.WorkspaceIndexService;
 import com.tongji.cst3492.jentor.settings.TaConfigurable;
 import com.tongji.cst3492.jentor.settings.TaSettings;
@@ -150,10 +153,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final List<CodeFileSnapshot> pendingFiles = new ArrayList<>();
     private ChatRequest currentRequest;
     private EditRequest currentEditRequest;
+    private IntentRequest currentIntentRequest;
     private volatile StreamState streamState;
     private AssistantBubble streamCard;
     private MessageView welcomeMessage;
     private String lastAssistantTextForIntent = "";
+    private String lastEditStatus = "";
     private Conversation currentConversation;
     private String displayedLanguage;
     private boolean syncingLanguageSelection;
@@ -544,9 +549,6 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         }
         pendingEditTargetPath = null;
         pendingCodeEditRequested = false;
-        String sentAttachmentSummary = attachmentSummary();
-        appendMessage("user", visibleInstruction, false, true, sentAttachmentSummary);
-        input.setText("");
         runEditRequest(modelInstruction, visibleInstruction,
                 target.path(), target.startLine(), target.endLine(), 0);
     }
@@ -590,9 +592,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         busy = false;
                         setProgressText("");
                         updateSendButton();
-                        String message = I18n.t(currentLanguage(), "editNoChange");
-                        appendMessage("assistant", message, false, false, "");
-                        lastAssistantTextForIntent = message;
+                        lastEditStatus = I18n.t(currentLanguage(), "editNoChange");
+                        appendAssistantClarification(lastEditStatus);
                         return;
                     }
                     String relocated = retryCount == 0
@@ -635,7 +636,27 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     currentLanguage(), instruction);
             return;
         }
-        new EditReviewDialog(project, file, document, proposal.newText(), instruction).show();
+        EditReviewDialog dialog =
+                new EditReviewDialog(project, file, document, proposal.newText(), instruction);
+        boolean accepted = dialog.showAndGet();
+        if (accepted && dialog.applyResult() != null) {
+            if (dialog.applyResult().isApplied()) {
+                String summary = I18n.t(currentLanguage(), "editApplied") + "\n- "
+                        + proposal.path() + "\n- " + instruction;
+                lastEditStatus = summary;
+                appendAssistantClarification(summary);
+                history.add(new ChatMessage("assistant", summary));
+                while (history.size() > 8) {
+                    history.remove(0);
+                }
+            } else if (dialog.applyResult().status() == EditApplyResult.Status.NO_CHANGE) {
+                lastEditStatus = I18n.t(currentLanguage(), "editNoChange");
+                appendAssistantClarification(lastEditStatus);
+            }
+        } else if (!accepted) {
+            lastEditStatus = I18n.t(currentLanguage(), "editCancelled");
+            appendAssistantClarification(lastEditStatus);
+        }
     }
 
     private String targetFromRefusal(String refusal, String currentTarget) {
@@ -674,40 +695,137 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (question.isEmpty()) {
             return;
         }
-        String assistantAdvice = lastAssistantTextForIntent;
-        String actionableAdvice = CodeEditIntent.hasActionableAdvice(assistantAdvice)
-                ? assistantAdvice : "";
-        boolean adoptsSuggestion =
-                CodeEditIntent.isAdoption(question, assistantAdvice);
-        boolean editRequest = pendingCodeEditRequested
-                || adoptsSuggestion
-                || CodeEditIntent.isDirectEditRequest(question);
-        if (editRequest) {
-            EditTarget target = resolveEditTarget(
-                    question, actionableAdvice);
+        appendMessage("user", question, false, true, attachmentSummary());
+        input.setText("");
+        if (pendingCodeEditRequested) {
+            EditTarget target = resolveEditTarget(question, "");
             if (target != null) {
                 historyLoadGeneration++;
-                sendEdit(question, target, actionableAdvice);
+                sendEdit(question, target, "");
                 return;
             }
             pendingCodeEditRequested = false;
             pendingEditTargetPath = null;
-            appendMessage("user", question, false, true, attachmentSummary());
-            input.setText("");
-            String message = I18n.t(currentLanguage(), "editNoTarget");
-            appendMessage("assistant", message, false, false, "");
-            lastAssistantTextForIntent = message;
+            appendAssistantClarification(I18n.t(currentLanguage(), "editNoTarget"));
             return;
         }
+        startIntentRouting(question);
+    }
+
+    private void startIntentRouting(String question) {
+        busy = true;
+        int generation = ++requestGeneration;
+        updateSendButton();
+        setProgressText(I18n.t(currentLanguage(), "routingRequest"));
+        EditorTarget editor = selectedEditorTarget();
+        String activePath = editor == null ? "" : editor.path();
+        String activeSnippet = pendingCodeContext != null && pendingCodeContext.hasSelection()
+                ? pendingCodeContext.selected() : "";
+        WorkspaceIndexService indexService = project.getService(WorkspaceIndexService.class);
+        WorkspaceIndex index = indexService == null ? null : indexService.getIndex();
+        List<String> workspaceFiles = index == null
+                ? List.of()
+                : index.files().stream().map(file -> file.path()).limit(80).toList();
+        IntentRequest request = service.routeIntent(
+                question,
+                routingHistory(),
+                lastEditStatus,
+                activePath,
+                activeSnippet,
+                workspaceFiles,
+                currentLanguage());
+        currentIntentRequest = request;
+        request.future().whenComplete((decision, error) ->
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (generation != requestGeneration
+                            || currentIntentRequest != request
+                            || request.isCancelled()) {
+                        return;
+                    }
+                    currentIntentRequest = null;
+                    if (error != null) {
+                        busy = false;
+                        setProgressText("");
+                        updateSendButton();
+                        appendError(friendlyError(error), currentLanguage(), question);
+                        return;
+                    }
+                    handleIntent(question, decision);
+                }));
+    }
+
+    private List<ChatMessage> routingHistory() {
+        List<ChatMessage> routeHistory = new ArrayList<>(history);
+        if (!lastAssistantTextForIntent.isBlank()) {
+            boolean represented = !routeHistory.isEmpty()
+                    && "assistant".equals(routeHistory.get(routeHistory.size() - 1).role())
+                    && lastAssistantTextForIntent.equals(
+                            routeHistory.get(routeHistory.size() - 1).content());
+            if (!represented) {
+                routeHistory.add(new ChatMessage("assistant", lastAssistantTextForIntent));
+            }
+        }
+        return routeHistory;
+    }
+
+    private void handleIntent(String question, RouteDecision decision) {
+        if (decision.intent() == ConversationIntent.EDIT) {
+            String advice = decision.usePreviousAnalysis()
+                    ? lastAssistantTextForIntent : "";
+            String signal = question + " " + String.join(" ", decision.targetHints());
+            EditTarget target = resolveEditTarget(signal, advice);
+            if (target == null) {
+                busy = false;
+                setProgressText("");
+                updateSendButton();
+                appendAssistantClarification(I18n.t(currentLanguage(), "editNoTarget"));
+                return;
+            }
+            historyLoadGeneration++;
+            String instruction = decision.instruction().isBlank()
+                    ? question : decision.instruction();
+            sendEdit(instruction, target, advice);
+            return;
+        }
+        if (decision.intent() == ConversationIntent.ANALYZE) {
+            submitChat(question, true, true);
+            return;
+        }
+        if (decision.intent() == ConversationIntent.STATUS) {
+            busy = false;
+            setProgressText("");
+            updateSendButton();
+            String message = lastEditStatus.isBlank()
+                    ? I18n.t(currentLanguage(), "editStatusNone")
+                    : lastEditStatus;
+            appendAssistantClarification(message);
+            return;
+        }
+        if (decision.intent() == ConversationIntent.CLARIFY) {
+            busy = false;
+            setProgressText("");
+            updateSendButton();
+            String message = decision.clarification().isBlank()
+                    ? I18n.t(currentLanguage(), "intentClarify")
+                    : decision.clarification();
+            appendAssistantClarification(message);
+            return;
+        }
+        submitChat(question, TaSettings.getInstance().getState().workspaceContext, false);
+    }
+
+    private void appendAssistantClarification(String message) {
+        appendMessage("assistant", message, false, false, "");
+        lastAssistantTextForIntent = message;
+    }
+
+    private void submitChat(String question, boolean includeWorkspace, boolean analyze) {
         historyLoadGeneration++;
         CodeContext codeContext = pendingContextSnapshot();
-        boolean includeWorkspace = TaSettings.getInstance().getState().workspaceContext;
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
         String sentAttachmentSummary = attachmentSummary();
         long askedAt = System.currentTimeMillis();
 
-        appendMessage("user", question, false, true, sentAttachmentSummary);
-        input.setText("");
         busy = true;
         int generation = ++requestGeneration;
         updateSendButton();
@@ -719,7 +837,11 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
         ChatRequest request;
         try {
-            request = service.ask(question, codeContext, historySnapshot, stage ->
+            String promptQuestion = analyze
+                    ? question + "\n\nAnalyze the relevant workspace code and identify concrete "
+                    + "problems with file and method details. Do not claim that code was modified."
+                    : question;
+            request = service.ask(promptQuestion, codeContext, historySnapshot, stage ->
                     ApplicationManager.getApplication().invokeLater(() -> {
                         if (generation == requestGeneration && busy) {
                             setProgressText(stage);
@@ -807,6 +929,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
+        cancelCurrentIntentRequest();
         cancelCurrentEditRequest();
         flushStream();
         discardStreamCard();
@@ -1280,6 +1403,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingEditTargetPath = null;
         pendingCodeEditRequested = false;
         lastAssistantTextForIntent = "";
+        lastEditStatus = "";
         pendingFiles.clear();
         attachmentBar.setVisible(false);
         input.setText("");
@@ -1308,6 +1432,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
+        cancelCurrentIntentRequest();
         cancelCurrentEditRequest();
         discardStreamCard();
         streamTimer.stop();
@@ -1322,6 +1447,13 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (currentEditRequest != null) {
             currentEditRequest.cancel();
             currentEditRequest = null;
+        }
+    }
+
+    private void cancelCurrentIntentRequest() {
+        if (currentIntentRequest != null) {
+            currentIntentRequest.cancel();
+            currentIntentRequest = null;
         }
     }
 
@@ -1477,6 +1609,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingCodeContext = null;
         pendingEditTargetPath = null;
         pendingCodeEditRequested = false;
+        lastEditStatus = "";
         pendingFiles.clear();
         attachmentBar.setVisible(false);
         transcriptPanel.removeAll();
@@ -1706,6 +1839,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             currentRequest.cancel();
             currentRequest = null;
         }
+        cancelCurrentIntentRequest();
         cancelCurrentEditRequest();
         settingsTimer.stop();
         reflowTimer.stop();

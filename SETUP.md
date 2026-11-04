@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-1.8.1.zip
+build/distributions/jentor-1.9.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-1.8.1.zip`；
+3. 选择 `build/distributions/jentor-1.9.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -157,11 +157,12 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. 直接像正常对话一样提出修改，例如“修复 OrderService 的 cancelOrder 空指针”；
 2. 也可以先问“检查 OrderService 有什么问题”，再回复“都修吧”或“按这个改”；
-3. 插件会根据当前编辑器、问题中的类名/方法名和工作区索引自动定位目标文件；
-4. 可选：右键 `Edit Code with Jentor` 作为快速入口；
-5. 在 IntelliJ 内置双栏 Diff 中审阅原始文件和建议文件；
-6. 点击“应用”写入编辑器，或取消保持文件不变；
-7. 应用后可使用 `Ctrl+Z` 撤销；文件只读、生成期间被修改或 Java 语法无效时禁止应用。
+3. 每条普通消息会先经过 LLM 语义路由，区分聊天、分析、修改、状态查询和澄清；
+4. 插件会根据当前编辑器、问题中的类名/方法名和工作区索引自动定位目标文件；
+5. 可选：右键 `Edit Code with Jentor` 作为快速入口；
+6. 在 IntelliJ 内置双栏 Diff 中审阅原始文件和建议文件；
+7. 点击“应用”写入编辑器，或取消保持文件不变；
+8. 应用后可使用 `Ctrl+Z` 撤销；文件只读、生成期间被修改或 Java 语法无效时禁止应用。
 
 管理历史对话：
 
@@ -260,7 +261,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 1.8.1 ZIP
+- [ ] `build-plugin.ps1` 成功生成 1.9.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -283,6 +284,8 @@ python tools/build_index.py `
 - [ ] 直接说“修复某个类/方法的问题”时无需附加文件即可自动定位目标
 - [ ] 先询问代码问题，再回复“都修吧”可以复用上一轮分析进入修改
 - [ ] `Edit Code with Jentor` 作为可选快捷入口正常工作
+- [ ] “修改了哪些？”被识别为状态查询，不会误触发代码修改
+- [ ] 低置信度意图会自然追问，不会直接应用代码修改
 - [ ] 代码修改建议始终先在 IntelliJ 内置双栏 Diff 中显示
 - [ ] 取消 Diff 不会修改源码；应用后可按 `Ctrl+Z` 撤销
 - [ ] 生成期间停止按钮会取消编辑请求

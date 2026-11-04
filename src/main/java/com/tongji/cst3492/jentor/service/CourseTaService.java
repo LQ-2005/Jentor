@@ -14,6 +14,10 @@ import com.tongji.cst3492.jentor.llm.EditPromptBuilder;
 import com.tongji.cst3492.jentor.llm.EditProposalParser;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.tongji.cst3492.jentor.index.Retriever;
+import com.tongji.cst3492.jentor.intent.IntentDecisionParser;
+import com.tongji.cst3492.jentor.intent.IntentPromptBuilder;
+import com.tongji.cst3492.jentor.intent.MockIntentRouter;
+import com.tongji.cst3492.jentor.intent.RouteDecision;
 import com.tongji.cst3492.jentor.llm.Answer;
 import com.tongji.cst3492.jentor.llm.AnswerService;
 import com.tongji.cst3492.jentor.llm.CancellationToken;
@@ -258,6 +262,67 @@ public final class CourseTaService {
             }
         }
         return local;
+    }
+
+    /**
+     * Classifies the latest message before choosing chat, analysis, edit or status.
+     * This request has no side effects; Mock mode uses a deterministic local route.
+     */
+    public IntentRequest routeIntent(
+            String question,
+            List<ChatMessage> history,
+            String lastAppliedEdit,
+            String activeFile,
+            String activeSnippet,
+            List<String> workspaceFiles,
+            String language) {
+        TaSettings settings = TaSettings.getInstance();
+        TaSettings.State state = settings.getState();
+        boolean mock = state.useMockModel;
+        String zhLanguage = "zh".equals(language) ? "zh" : "en";
+        if (mock) {
+            RouteDecision decision = MockIntentRouter.route(
+                    question, history, lastAppliedEdit,
+                    activeFile != null && !activeFile.isBlank(),
+                    "zh".equals(zhLanguage));
+            return new IntentRequest(
+                    CompletableFuture.completedFuture(decision), null, new CancellationToken());
+        }
+
+        String apiKey = settings.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            return IntentRequest.failed(new IllegalStateException(
+                    "Configure the API key in Settings | Tools | Jentor."));
+        }
+        LlmConfig config = new LlmConfig(
+                state.baseUrl,
+                apiKey,
+                state.chatModel,
+                0.0,
+                Math.max(128, Math.min(600, state.maxTokens)));
+        List<ChatMessage> messages = new IntentPromptBuilder().build(
+                question,
+                history,
+                lastAppliedEdit,
+                activeFile,
+                activeSnippet,
+                workspaceFiles,
+                zhLanguage);
+        CompletableFuture<RouteDecision> result = new CompletableFuture<>();
+        CancellationToken token = new CancellationToken();
+        Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
+            try {
+                String reply = chatClient(false).complete(config, messages, token);
+                token.throwIfCancelled();
+                result.complete(IntentDecisionParser.parse(
+                        reply, question, "zh".equals(zhLanguage)));
+            } catch (CancellationException cancelled) {
+                result.cancel(false);
+            } catch (Throwable error) {
+                result.completeExceptionally(error);
+            }
+        });
+        return new IntentRequest(result, task, token);
     }
 
     /**

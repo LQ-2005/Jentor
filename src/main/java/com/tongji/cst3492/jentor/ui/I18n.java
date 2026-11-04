@@ -25,6 +25,7 @@ public final class I18n {
             case "send" -> zh ? "发送" : "Send";
             case "stop" -> zh ? "停止生成" : "Stop";
             case "thinking" -> zh ? "正在思考..." : "Thinking...";
+            case "routingRequest" -> zh ? "正在理解请求..." : "Understanding your request...";
             case "you" -> zh ? "你" : "You";
             case "courseTa" -> zh ? "Jentor 助教" : "Jentor";
             case "error" -> zh ? "错误" : "Error";
@@ -118,6 +119,18 @@ public final class I18n {
                     ? "目标文件为只读，无法应用修改："
                     : "The target file is read-only and cannot be edited:";
             case "editGenerating" -> zh ? "正在生成修改建议…" : "Generating a suggested change...";
+            case "editApplied" -> zh ? "已应用代码修改：" : "Code edit applied:";
+            case "editCancelled" -> zh
+                    ? "已取消代码修改，源码保持不变。"
+                    : "Code edit cancelled; source files were not changed.";
+            case "editStatusApplied" -> zh
+                    ? "最近一次已应用的代码修改：" : "Last applied code edit:";
+            case "editStatusNone" -> zh
+                    ? "当前对话中还没有成功应用过代码修改。"
+                    : "No code edit has been applied successfully in this conversation.";
+            case "intentClarify" -> zh
+                    ? "我还不确定你是希望解释、分析还是修改代码。可以再具体说明吗？"
+                    : "I am not yet sure whether you want an explanation, analysis, or a code change. Could you clarify?";
             case "editNoChange" -> zh
                     ? "当前文件已满足该要求（NO_CHANGE）"
                     : "The file already satisfies the request (NO_CHANGE)";
