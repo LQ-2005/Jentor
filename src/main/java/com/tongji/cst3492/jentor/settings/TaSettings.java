@@ -53,6 +53,7 @@ public final class TaSettings implements PersistentStateComponent<TaSettings.Sta
         public boolean useMockModel = false;
         public boolean streamOutput = true;
         public boolean workspaceContext = false;
+        /** Legacy 1.7 edit-mode flag, retained only when loading old settings. */
         public boolean editWorkspace = false;
         /** Legacy 1.1 folder, consumed once when migrating to the 1.2 catalog. */
         public String courseMaterialsPath = "";

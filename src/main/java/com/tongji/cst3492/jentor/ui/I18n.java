@@ -105,19 +105,15 @@ public final class I18n {
             case "sendHint" -> zh
                     ? "Enter 发送，Shift+Enter 换行"
                     : "Enter sends, Shift+Enter adds a new line";
-            case "editWorkspace" -> zh ? "修改工作区代码" : "Edit workspace code";
-            case "editWorkspaceHint" -> zh
-                    ? "下一次提问将被视为代码修改请求，先生成建议再打开 diff 审阅"
-                    : "The next question is treated as a code change: Jentor proposes it, then opens a diff to review";
             case "editPrompt" -> zh
-                    ? "已进入代码修改模式，请输入希望执行的修改。"
-                    : "Code edit mode is ready. Describe the change you want.";
+                    ? "可以直接描述希望如何修改当前代码。"
+                    : "Describe how you want the current code changed.";
             case "editNoTarget" -> zh
-                    ? "请先附加一个工作区文件，或在编辑器中打开目标文件"
-                    : "Attach a workspace file first, or open the target file in the editor";
-            case "editMultipleTargets" -> zh
-                    ? "编辑模式一次只能附加一个目标文件，请移除多余附件后重试。"
-                    : "Edit mode supports one attached target file. Remove extra attachments and try again.";
+                    ? "我还不能确定要修改哪个文件。请打开目标文件，或告诉我类名或方法名。"
+                    : "I cannot determine which file to change. Open the target or name the class or method.";
+            case "editRelocated" -> zh
+                    ? "我定位到实际需要修改的文件是"
+                    : "I located the file that actually needs the change:";
             case "editReadOnly" -> zh
                     ? "目标文件为只读，无法应用修改："
                     : "The target file is read-only and cannot be edited:";

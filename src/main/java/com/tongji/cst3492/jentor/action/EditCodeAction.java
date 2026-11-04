@@ -18,7 +18,7 @@ import com.tongji.cst3492.jentor.ui.ChatPanel;
 import com.tongji.cst3492.jentor.ui.JentorToolWindowPanel;
 import org.jetbrains.annotations.NotNull;
 
-/** Opens Jentor in edit mode for the selected code or active writable file. */
+/** Opens Jentor with an optional shorthand for editing the active writable file. */
 public final class EditCodeAction extends AnAction {
     @Override
     public void update(@NotNull AnActionEvent event) {

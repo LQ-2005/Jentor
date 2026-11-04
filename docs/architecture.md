@@ -245,8 +245,18 @@ even on the first question after startup.
 
 ## Editing pipeline
 
-The edit mode turns one instruction into a reviewable file change. It is kept
-separate from the teaching prompt because the reply contract is different.
+The conversational edit flow turns an ordinary chat turn into a reviewable file
+change when the intent indicates modification. It is kept separate from the
+teaching prompt because the reply contract is different. There is no persistent
+edit-mode switch and no requirement to attach a target file.
+
+`CodeEditIntent` recognizes direct modification requests and short adoption
+phrases such as "fix it". `EditTargetResolver` combines the active editor,
+selected code, the latest assistant analysis, and the workspace outline to find
+the likely target. If a model refusal names another `.java` file that exists in
+the workspace, the request relocates once and retries automatically; the user
+still sees the file name in the conversation and must approve the resulting
+diff.
 
 `EditPromptBuilder` asks for exactly one fenced `jentor-edit` block holding the
 **complete** new file, or `NO_CHANGE`, or `REFUSE: <reason>`. The rules forbid
@@ -278,10 +288,9 @@ the suggestion was produced, skips identical content, validates Java PSI before
 writing, preserves the source file's line-separator style, and replaces the whole
 document inside `WriteCommandAction` so the change is one undoable command. It
 never creates or deletes files and never saves silently: the built-in diff review
-is expected to run first. Target selection binds a selection range only when the
-selected editor file is the same target; multiple attached targets are rejected.
-Edit requests expose a cancellation handle so the stop button cancels the token,
-task and HTTP request.
+is expected to run first. A selection range is used only when it belongs to the
+resolved target. Edit requests expose a cancellation handle so the stop button
+cancels the token, task and HTTP request.
 
 ## Conversation memory
 

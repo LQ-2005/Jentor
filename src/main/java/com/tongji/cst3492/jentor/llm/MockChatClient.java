@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 /**
  * Deterministic client used by unit tests and the offline demo. It extracts the
  * first context block and cites it, so the whole answer path can be exercised
- * without an API key. In edit mode it returns a complete file with one extra
+ * without an API key. For edit requests it returns a complete file with one extra
  * comment, which exercises the diff and apply path offline.
  */
 public final class MockChatClient implements ChatClient {

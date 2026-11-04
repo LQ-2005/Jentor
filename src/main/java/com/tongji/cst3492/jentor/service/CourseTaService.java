@@ -329,7 +329,7 @@ public final class CourseTaService {
                     if (requestedPath.isBlank() || !requestedPath.equals(proposedPath)) {
                         result.complete(new EditProposalParser.Result(
                                 null,
-                                "the model tried to change a different file",
+                                "the model tried to change a different file: " + proposedPath,
                                 false));
                         return;
                     }
