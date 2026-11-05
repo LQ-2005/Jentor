@@ -29,5 +29,6 @@ class EditPlanPromptBuilderTest {
         assertTrue(prompt.contains("cancelOrder 空指针"));
         assertTrue(prompt.contains("src/OrderService.java"));
         assertTrue(prompt.contains("LATEST USER REQUEST:"));
+        assertTrue(messages.get(0).content().contains("CREATE"));
     }
 }

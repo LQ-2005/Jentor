@@ -22,7 +22,7 @@ public final class EditPlanPromptBuilder {
                 {
                   "summary": "short user-facing summary",
                   "files": [
-                    {"path": "project-relative/path.java", "instruction": "exact changes for this file"}
+                    {"path": "project-relative/path.java", "operation": "MODIFY|CREATE", "instruction": "exact changes for this file"}
                   ],
                   "skipped": [
                     {"path": "project-relative/path.java", "reason": "why it is not changed"}
@@ -31,9 +31,13 @@ public final class EditPlanPromptBuilder {
                 }
 
                 Rules:
-                - Use project-relative paths from AVAILABLE WORKSPACE FILES only.
+                - MODIFY paths must come from AVAILABLE WORKSPACE FILES.
+                - CREATE paths must be new project-relative source paths in an existing
+                  package directory implied by those files.
                 - Do not include read-only files in files; put them in skipped.
                 - Do not invent files or paths.
+                - Use CREATE only when a new source file is genuinely required.
+                - CREATE paths must use an existing project package directory and must not exist.
                 - If the latest request adopts a previous analysis, carry all relevant issues
                   into file-specific instructions.
                 - Keep unrelated files out.

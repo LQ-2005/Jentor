@@ -9,11 +9,22 @@ public record EditProposal(
         String path,
         long baseModificationStamp,
         String newText,
-        String instruction) {
+        String instruction,
+        EditOperation operation) {
 
     public EditProposal {
         path = path == null ? "" : path.replace('\\', '/').strip();
         newText = newText == null ? "" : newText;
         instruction = instruction == null ? "" : instruction;
+        operation = operation == null ? EditOperation.MODIFY : operation;
+    }
+
+    public EditProposal(
+            String path, long baseModificationStamp, String newText, String instruction) {
+        this(path, baseModificationStamp, newText, instruction, EditOperation.MODIFY);
+    }
+
+    public boolean isCreate() {
+        return operation == EditOperation.CREATE;
     }
 }

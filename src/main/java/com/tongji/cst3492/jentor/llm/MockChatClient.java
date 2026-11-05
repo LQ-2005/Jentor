@@ -14,6 +14,8 @@ public final class MockChatClient implements ChatClient {
     private static final Pattern CONTEXT =
             Pattern.compile("document=\"([^\"]+)\" locator=\"([^\"]+)\"");
     private static final Pattern FILE_LINE = Pattern.compile("(?m)^FILE:\\s*(.+)$");
+    private static final Pattern NEW_FILE_LINE =
+            Pattern.compile("(?m)^NEW FILE:\\s*(.+)$");
     private static final Pattern FILE_BODY =
             Pattern.compile("--- BEGIN FILE ---\\R([\\s\\S]*?)\\R--- END FILE ---");
     private static final int STREAM_CHUNK_CHARS = 24;
@@ -53,6 +55,20 @@ public final class MockChatClient implements ChatClient {
     }
 
     private static String mockEdit(String prompt) {
+        Matcher newFile = NEW_FILE_LINE.matcher(prompt);
+        if (newFile.find()) {
+            String path = newFile.group(1).strip();
+            int slash = path.lastIndexOf('/');
+            String fileName = slash < 0 ? path : path.substring(slash + 1);
+            int dot = fileName.lastIndexOf('.');
+            String typeName = dot < 0 ? fileName : fileName.substring(0, dot);
+            String packageName = inferredPackage(path);
+            String prefix = packageName.isBlank() ? "" : "package " + packageName + ";\n\n";
+            return "```jentor-edit path=" + path + "\n"
+                    + prefix + "public class " + typeName + " {\n"
+                    + "    // jentor mock new file\n"
+                    + "}\n```";
+        }
         Matcher file = FILE_LINE.matcher(prompt);
         Matcher body = FILE_BODY.matcher(prompt);
         if (!file.find() || !body.find()) {
@@ -63,6 +79,19 @@ public final class MockChatClient implements ChatClient {
         return "```jentor-edit path=" + path + "\n"
                 + content + "\n// jentor mock edit\n"
                 + "```";
+    }
+
+    private static String inferredPackage(String path) {
+        int marker = path.indexOf("src/main/java/");
+        int start = marker < 0 ? -1 : marker + "src/main/java/".length();
+        if (start < 0) {
+            return "";
+        }
+        int slash = path.lastIndexOf('/');
+        if (slash < start) {
+            return "";
+        }
+        return path.substring(start, slash).replace('/', '.');
     }
 
     /**

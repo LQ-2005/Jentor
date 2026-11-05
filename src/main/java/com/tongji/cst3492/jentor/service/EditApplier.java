@@ -4,11 +4,14 @@ import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectUtil;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.model.EditProposal;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,55 +27,6 @@ public final class EditApplier {
     public static final String COMMAND_NAME = "Jentor: apply suggested change";
 
     private EditApplier() {
-    }
-
-    public static EditApplyResult apply(Project project, EditProposal proposal) {
-        if (project == null || project.isDisposed()) {
-            return EditApplyResult.refused("the project is not available");
-        }
-        if (proposal == null) {
-            return EditApplyResult.refused("there is no suggestion to apply");
-        }
-        if (!EditGuard.isWritablePath(proposal.path())) {
-            return EditApplyResult.refused("this file type cannot be edited: " + proposal.path());
-        }
-        if (EditGuard.isTooLarge(proposal.newText())) {
-            return EditApplyResult.refused("the proposed file is too large to apply");
-        }
-        VirtualFile file = WorkspaceFileReader.resolve(project, proposal.path());
-        if (file == null || !file.isValid() || file.isDirectory()) {
-            return EditApplyResult.notFound(proposal.path());
-        }
-        if (!file.isWritable()) {
-            return EditApplyResult.refused("the file is read-only: " + proposal.path());
-        }
-        Document document = FileDocumentManager.getInstance().getDocument(file);
-        if (document == null) {
-            return EditApplyResult.refused("not a text file: " + proposal.path());
-        }
-        if (EditGuard.isConflict(proposal.baseModificationStamp(), document.getModificationStamp())) {
-            return EditApplyResult.conflict(
-                    "the file changed after the suggestion was produced; review it again");
-        }
-        String current = document.getText();
-        if (EditGuard.isNoOp(current, proposal.newText())) {
-            return EditApplyResult.noChange(proposal.path());
-        }
-        String next = EditGuard.preserveLineSeparators(current, proposal.newText());
-        String syntaxError = JavaEditValidator.validationError(project, file, next);
-        if (!syntaxError.isBlank()) {
-            return EditApplyResult.refused(
-                    "the suggested Java file has syntax errors: " + syntaxError);
-        }
-        try {
-            WriteCommandAction.writeCommandAction(project)
-                    .withName(COMMAND_NAME)
-                    .run(() -> document.replaceString(0, document.getTextLength(), next));
-            return EditApplyResult.applied(proposal.path());
-        } catch (RuntimeException error) {
-            String message = error.getMessage();
-            return EditApplyResult.failed(message == null ? error.getClass().getSimpleName() : message);
-        }
     }
 
     public static EditBatchApplyResult applyAll(
@@ -102,14 +56,33 @@ public final class EditApplier {
                     .withName(COMMAND_NAME)
                     .run(() -> {
                         for (PreparedEdit edit : prepared) {
-                            if (EditGuard.isConflict(
-                                    edit.proposal().baseModificationStamp(),
-                                    edit.document().getModificationStamp())) {
-                                throw new IllegalStateException(
-                                        "File changed while applying: " + edit.proposal().path());
+                            if (edit.proposal().isCreate()) {
+                                if (WorkspaceFileReader.resolve(
+                                        project, edit.proposal().path()) != null) {
+                                    throw new IllegalStateException(
+                                            "File was created during review: "
+                                                    + edit.proposal().path());
+                                }
+                                try {
+                                    VirtualFile created = edit.parent().createChildData(
+                                            project, edit.fileName());
+                                    VfsUtil.saveText(created, edit.nextText());
+                                } catch (IOException error) {
+                                    throw new IllegalStateException(
+                                            "Cannot write new file: "
+                                                    + edit.proposal().path(), error);
+                                }
+                            } else {
+                                if (EditGuard.isConflict(
+                                        edit.proposal().baseModificationStamp(),
+                                        edit.document().getModificationStamp())) {
+                                    throw new IllegalStateException(
+                                            "File changed while applying: "
+                                                    + edit.proposal().path());
+                                }
+                                edit.document().replaceString(
+                                        0, edit.document().getTextLength(), edit.nextText());
                             }
-                            edit.document().replaceString(
-                                    0, edit.document().getTextLength(), edit.nextText());
                         }
                     });
             return EditBatchApplyResult.applied(
@@ -134,6 +107,40 @@ public final class EditApplier {
         if (EditGuard.isTooLarge(proposal.newText())) {
             errors.add("Proposed file is too large: " + proposal.path());
             return null;
+        }
+        if (proposal.isCreate()) {
+            if (proposal.newText().isBlank()) {
+                errors.add("New file is empty: " + proposal.path());
+                return null;
+            }
+            VirtualFile existing = WorkspaceFileReader.resolve(project, proposal.path());
+            if (existing != null) {
+                errors.add("Cannot create; file already exists: " + proposal.path());
+                return null;
+            }
+            int slash = proposal.path().lastIndexOf('/');
+            VirtualFile parent = slash < 0
+                    ? ProjectUtil.guessProjectDir(project)
+                    : WorkspaceFileReader.resolve(project, proposal.path().substring(0, slash));
+            if (parent == null || !parent.isValid()
+                    || !parent.isDirectory() || !parent.isWritable()) {
+                errors.add("Parent directory is unavailable or read-only: "
+                        + proposal.path());
+                return null;
+            }
+            String next = EditGuard.normalize(proposal.newText());
+            String syntaxError = JavaEditValidator.validationError(
+                    project, proposal.path(), next);
+            if (!syntaxError.isBlank()) {
+                errors.add("Java syntax error in " + proposal.path() + ": " + syntaxError);
+                return null;
+            }
+            return new PreparedEdit(
+                    proposal,
+                    null,
+                    parent,
+                    proposal.path().substring(slash + 1),
+                    next);
         }
         VirtualFile file = WorkspaceFileReader.resolve(project, proposal.path());
         if (file == null || !file.isValid() || file.isDirectory()) {
@@ -164,10 +171,14 @@ public final class EditApplier {
             errors.add("Java syntax error in " + proposal.path() + ": " + syntaxError);
             return null;
         }
-        return new PreparedEdit(proposal, document, next);
+        return new PreparedEdit(proposal, document, null, "", next);
     }
 
     private record PreparedEdit(
-            EditProposal proposal, Document document, String nextText) {
+            EditProposal proposal,
+            Document document,
+            VirtualFile parent,
+            String fileName,
+            String nextText) {
     }
 }

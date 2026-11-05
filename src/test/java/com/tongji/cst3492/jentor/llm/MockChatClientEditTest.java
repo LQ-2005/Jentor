@@ -37,4 +37,27 @@ class MockChatClientEditTest {
 
         assertTrue(reply.contains("[Lec-2.pdf, p.6]"), reply);
     }
+
+    @Test
+    void aNewFilePromptProducesACompilableJavaFile() {
+        String reply = new MockChatClient().complete(CONFIG, List.of(
+                ChatMessage.system("Create a jentor-edit block."),
+                ChatMessage.user("""
+                        NEW FILE: src/main/java/com/example/PaymentStrategy.java
+                        LANGUAGE: JAVA
+
+                        REQUEST:
+                        create a payment strategy
+                        """)), new CancellationToken());
+
+        EditProposalParser.Result result = EditProposalParser.parse(
+                reply, 0L, "create a payment strategy");
+        assertTrue(result.hasProposal(), reply);
+        assertEquals("src/main/java/com/example/PaymentStrategy.java",
+                result.proposal().path());
+        assertTrue(result.proposal().newText().contains(
+                "package com.example;"));
+        assertTrue(result.proposal().newText().contains(
+                "public class PaymentStrategy"));
+    }
 }

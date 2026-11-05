@@ -14,7 +14,8 @@ class EditPlanParserTest {
                 {
                   "summary": "修复订单模块",
                   "files": [
-                    {"path": "src/OrderService.java", "instruction": "修复空指针"},
+                    {"path": "src/OrderService.java", "operation": "MODIFY", "instruction": "修复空指针"},
+                    {"path": "src/RefundStrategy.java", "operation": "CREATE", "instruction": "新增策略"},
                     {"path": "src/OrderDemo.java", "instruction": "同步调用方式"}
                   ],
                   "skipped": [
@@ -26,8 +27,10 @@ class EditPlanParserTest {
                 """);
 
         assertEquals("修复订单模块", plan.summary());
-        assertEquals(2, plan.files().size());
+        assertEquals(3, plan.files().size());
         assertEquals("src/OrderService.java", plan.files().get(0).path());
+        assertEquals(com.tongji.cst3492.jentor.model.EditOperation.CREATE,
+                plan.files().get(1).operation());
         assertEquals(1, plan.skipped().size());
         assertTrue(plan.skipped().get(0).reason().contains("只读"));
     }

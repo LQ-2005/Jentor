@@ -146,6 +146,11 @@ This is the F0 baseline required for every group.
   shows one review window with a native two-pane diff tab per file.
   **Apply all** preflights the whole batch and writes it as one undoable command;
   one stale or invalid file prevents partial writes.
+- When a refactor requires new classes or interfaces, the planner may emit a
+  `CREATE` operation. New files are first shown in the native diff against an
+  empty document, with an explicit `[NEW]` tab. Creation is allowed only inside
+  an existing writable project directory and only after approval; existing files
+  are never overwritten.
 - Each normal message first goes through an LLM semantic router that returns
   `CHAT`, `ANALYZE`, `EDIT`, `STATUS`, or `CLARIFY`. It uses recent conversation,
   pending analysis, the active editor, selection and workspace file hints rather
@@ -198,7 +203,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-2.0.0.zip
+build\distributions\jentor-2.1.0.zip
 ```
 
 Install it into IntelliJ:

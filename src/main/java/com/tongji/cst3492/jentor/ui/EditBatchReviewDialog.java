@@ -8,6 +8,7 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
+import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -85,19 +86,33 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
         JBTabbedPane tabs = new JBTabbedPane();
         DiffContentFactory factory = DiffContentFactory.getInstance();
         for (ReviewItem item : items) {
-            if (item.file() == null || item.document() == null) {
+            if (!item.proposal().isCreate()
+                    && (item.file() == null || item.document() == null)) {
                 invalidFiles.add(item.proposal().path());
                 continue;
             }
             DiffRequestPanel panel =
                     DiffManager.getInstance().createRequestPanel(project, this, null);
-            panel.setRequest(new SimpleDiffRequest(
-                    item.file().getName(),
-                    factory.create(project, item.document(), item.file()),
-                    factory.create(project, item.proposal().newText(), item.file()),
-                    I18n.t(language(), "editReviewCurrent"),
-                    I18n.t(language(), "editReviewSuggested")));
-            tabs.addTab(item.file().getName(), panel.getComponent());
+            if (item.proposal().isCreate()) {
+                String fileName = fileName(item.proposal().path());
+                var fileType = FileTypeManager.getInstance()
+                        .getFileTypeByFileName(fileName);
+                panel.setRequest(new SimpleDiffRequest(
+                        fileName,
+                        factory.createEmpty(),
+                        factory.create(project, item.proposal().newText(), fileType),
+                        I18n.t(language(), "editReviewCurrent"),
+                        I18n.t(language(), "editReviewSuggested")));
+                tabs.addTab("[NEW] " + fileName, panel.getComponent());
+            } else {
+                panel.setRequest(new SimpleDiffRequest(
+                        item.file().getName(),
+                        factory.create(project, item.document(), item.file()),
+                        factory.create(project, item.proposal().newText(), item.file()),
+                        I18n.t(language(), "editReviewCurrent"),
+                        I18n.t(language(), "editReviewSuggested")));
+                tabs.addTab(item.file().getName(), panel.getComponent());
+            }
             tabs.setToolTipTextAt(tabs.getTabCount() - 1, item.proposal().path());
         }
         if (tabs.getTabCount() == 0) {
@@ -169,6 +184,13 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
     private List<ReviewItem> resolveItems(Project project, List<EditProposal> proposals) {
         List<ReviewItem> resolved = new ArrayList<>();
         for (EditProposal proposal : proposals) {
+            if (proposal.isCreate()) {
+                String syntaxError = JavaEditValidator.validationError(
+                        project, proposal.path(), proposal.newText());
+                resolved.add(new ReviewItem(
+                        proposal, null, null, syntaxError, new EditReviewState(0)));
+                continue;
+            }
             VirtualFile file = WorkspaceFileReader.resolve(project, proposal.path());
             Document document = file == null ? null
                     : com.intellij.openapi.fileEditor.FileDocumentManager
@@ -185,6 +207,11 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
                             : new EditReviewState(document.getModificationStamp())));
         }
         return List.copyOf(resolved);
+    }
+
+    private static String fileName(String path) {
+        int slash = path.lastIndexOf('/');
+        return slash < 0 ? path : path.substring(slash + 1);
     }
 
     private String language() {

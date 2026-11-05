@@ -47,4 +47,14 @@ class EditPromptBuilderTest {
 
         assertFalse(messages.get(1).content().contains("TARGET:"));
     }
+
+    @Test
+    void buildsAStrictNewFileProtocol() {
+        List<ChatMessage> messages = new EditPromptBuilder().buildNewFile(
+                "新增一个支付策略接口", "src/PaymentStrategy.java", "JAVA");
+
+        assertTrue(messages.get(0).content().contains("create exactly one new source file"));
+        assertTrue(messages.get(1).content().contains("NEW FILE: src/PaymentStrategy.java"));
+        assertTrue(messages.get(1).content().contains("新增一个支付策略接口"));
+    }
 }

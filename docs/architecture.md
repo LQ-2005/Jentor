@@ -263,9 +263,11 @@ routes become clarification requests. Mock mode uses a deterministic local route
 only for offline testing.
 
 `EditPlanPromptBuilder` runs before code generation and asks for a bounded JSON
-plan containing the relevant writable files, per-file instructions and explicit
-skipped files. The service validates every path, excluding read-only or unsafe
-files, and then runs `EditPromptBuilder` separately for each planned file.
+plan containing relevant files, an operation (`MODIFY` or `CREATE`), per-file
+instructions and explicit skipped files. The service validates every path,
+excluding read-only or unsafe files, and then runs `EditPromptBuilder`
+separately for each planned file. New files require an existing writable parent
+directory and must not already exist.
 
 `EditPromptBuilder` asks for exactly one fenced `jentor-edit` block holding the
 **complete** new file, or `NO_CHANGE`, or `REFUSE: <reason>`. The rules forbid
@@ -285,18 +287,20 @@ read-only), a 200k character cap, line-ending normalisation, the no-op check and
 the conflict test.
 
 `EditBatchReviewDialog` puts every proposal in its own tab using IntelliJ's
-built-in two-pane diff. Left content is bound to the live `Document`, so the
-comparison follows edits while the dialog is open. A `DocumentListener` feeds an
-`EditReviewState` per file; any stale or invalid member disables **Apply all**, so
-review can never silently apply a partial or outdated batch.
+built-in two-pane diff. Modified files are bound to the live `Document`, so the
+comparison follows edits while the dialog is open. New files compare an empty
+baseline against the proposed content and are marked `[NEW]`. A
+`DocumentListener` feeds an `EditReviewState` per modified file; any stale or
+invalid member disables **Apply all**, so review cannot silently apply a partial
+or outdated batch.
 
 `EditApplier.applyAll` is the batch write path. It preflights every proposal for
 path safety, writability, source-file conflicts, Java syntax, no-op content and
 line-separator preservation before replacing any document. All writes then run
 under one `WriteCommandAction`, so one failed preflight prevents partial changes.
-It never creates or deletes files and never saves silently. Edit batch requests
-expose a cancellation handle so the stop button cancels the planner and all
-file-generation calls.
+It creates only explicitly planned new files, never deletes files, and never
+saves silently. Edit batch requests expose a cancellation handle so the stop
+button cancels the planner and all file-generation calls.
 
 ## Conversation memory
 

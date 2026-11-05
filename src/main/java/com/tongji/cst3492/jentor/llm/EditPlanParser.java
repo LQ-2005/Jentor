@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tongji.cst3492.jentor.model.EditPlan;
 import com.tongji.cst3492.jentor.model.EditPlanEntry;
+import com.tongji.cst3492.jentor.model.EditOperation;
 import com.tongji.cst3492.jentor.model.SkippedEditFile;
 
 import java.util.ArrayList;
@@ -35,9 +36,16 @@ public final class EditPlanParser {
                 for (JsonNode node : filesNode) {
                     String path = node.path("path").asText("");
                     String instruction = node.path("instruction").asText("");
+                    EditOperation operation;
+                    try {
+                        operation = EditOperation.valueOf(
+                                node.path("operation").asText("MODIFY").toUpperCase());
+                    } catch (IllegalArgumentException invalidOperation) {
+                        operation = EditOperation.MODIFY;
+                    }
                     if (!path.isBlank() && !instruction.isBlank()
                             && files.size() < EditPlan.MAX_FILES) {
-                        files.add(new EditPlanEntry(path, instruction));
+                        files.add(new EditPlanEntry(path, operation, instruction));
                     }
                 }
             }

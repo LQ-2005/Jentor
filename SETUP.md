@@ -113,7 +113,7 @@ export JAVA_HOME=/path/to/jdk-21
 成功后会生成：
 
 ```text
-build/distributions/jentor-2.0.0.zip
+build/distributions/jentor-2.1.0.zip
 ```
 
 如果 Gradle wrapper 第一次需要下载 Gradle 发行包，请保持网络连接；插件运行依赖已在 `lib/` 中，不需要额外下载。
@@ -147,7 +147,7 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 
 1. `Settings → Plugins`；
 2. 齿轮 → `Install Plugin from Disk`；
-3. 选择 `build/distributions/jentor-2.0.0.zip`；
+3. 选择 `build/distributions/jentor-2.1.0.zip`；
 4. 重启 IntelliJ；
 5. 打开 `View → Tool Windows → Jentor`。
 
@@ -162,8 +162,9 @@ JUnit 首次运行会从 Maven Central 下载，因此这一步在全新环境�
 5. 可选：右键 `Edit Code with Jentor` 作为快速入口；
 6. 插件先生成多文件修改计划，并说明需要修改和必须跳过的文件；
 7. 在同一个审核窗口的多个标签页中，使用 IntelliJ 内置双栏 Diff 审阅每个文件；
-8. 点击“应用全部”批量写入，或取消保持所有文件不变；
-9. 应用后可使用 `Ctrl+Z` 撤销；任一文件只读、生成期间被修改或 Java 语法无效时禁止整批应用。
+8. 需要新类或接口时，新文件会以 `[NEW]` 标签和空文件作为 Diff 左侧展示；
+9. 点击“应用全部”批量写入，或取消保持所有文件不变；
+10. 应用后可使用 `Ctrl+Z` 撤销；任一文件只读、生成期间被修改或 Java 语法无效时禁止整批应用。
 
 管理历史对话：
 
@@ -262,7 +263,7 @@ python tools/build_index.py `
 
 ## 9. 验收清单
 
-- [ ] `build-plugin.ps1` 成功生成 2.0.0 ZIP
+- [ ] `build-plugin.ps1` 成功生成 2.1.0 ZIP
 - [ ] 在干净 IDEA 中安装并重启
 - [ ] 右侧出现 Jentor
 - [ ] Mock 模式能回答课程问题
@@ -294,6 +295,7 @@ python tools/build_index.py `
 - [ ] 多文件修改会显示多个原生 Diff 标签
 - [ ] 只读文件会列入“已跳过”，不影响其他可写文件
 - [ ] “应用全部”预检整批文件，任一文件过期时不会部分写入
+- [ ] 需要新类时会显示 `[NEW]` Diff，批准后才创建文件
 - [ ] 窗口变窄后消息重新换行，没有横向滚动条
 - [ ] 选中代码右键可附加，且代码块可复制
 - [ ] 从不同目录添加 PDF 后，各资料独立显示并进入就绪状态

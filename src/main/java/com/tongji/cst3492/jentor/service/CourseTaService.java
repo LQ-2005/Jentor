@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.EditTargetResolver;
@@ -36,6 +37,8 @@ import com.tongji.cst3492.jentor.model.DocumentMeta;
 import com.tongji.cst3492.jentor.model.EditBatchResult;
 import com.tongji.cst3492.jentor.model.EditPlan;
 import com.tongji.cst3492.jentor.model.EditPlanEntry;
+import com.tongji.cst3492.jentor.model.EditOperation;
+import com.tongji.cst3492.jentor.model.EditProposal;
 import com.tongji.cst3492.jentor.model.SkippedEditFile;
 import com.tongji.cst3492.jentor.model.WorkspaceContext;
 import com.tongji.cst3492.jentor.model.WorkspaceIndex;
@@ -50,6 +53,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -426,6 +430,55 @@ public final class CourseTaService {
                     }
                     if (!EditGuard.isWritablePath(path)) {
                         skipped.putIfAbsent(path, "unsupported or unsafe file path");
+                        continue;
+                    }
+                    if (planned.operation() == EditOperation.CREATE) {
+                        if (WorkspaceFileReader.resolve(project, path) != null) {
+                            skipped.putIfAbsent(path, "file already exists");
+                            continue;
+                        }
+                        int slash = path.lastIndexOf('/');
+                        VirtualFile parent = slash < 0
+                                ? ProjectUtil.guessProjectDir(project)
+                                : WorkspaceFileReader.resolve(
+                                project, path.substring(0, slash));
+                        if (parent == null || !parent.isValid()
+                                || !parent.isDirectory() || !parent.isWritable()) {
+                            skipped.putIfAbsent(path, "parent directory is unavailable or read-only");
+                            continue;
+                        }
+                        String instruction = question
+                                + "\n\nPrevious analysis:\n"
+                                + (previousAnalysis == null ? "" : previousAnalysis)
+                                + "\n\nPlanned new file:\n"
+                                + planned.instruction();
+                        List<ChatMessage> editMessages = new EditPromptBuilder().buildNewFile(
+                                instruction,
+                                path,
+                                EditGuard.extension(path).toUpperCase(Locale.ROOT));
+                        String reply = chatClient(mock).complete(
+                                editConfig, editMessages, token);
+                        token.throwIfCancelled();
+                        EditProposalParser.Result parsed =
+                                EditProposalParser.parse(reply, 0L, instruction);
+                        if (!parsed.hasProposal()) {
+                            skipped.putIfAbsent(path,
+                                    parsed.noChange()
+                                            ? "new file was not generated" : parsed.refusal());
+                            continue;
+                        }
+                        if (!path.equals(EditGuard.normalizeRelativePath(
+                                parsed.proposal().path()))) {
+                            skipped.putIfAbsent(path,
+                                    "model returned a different target file");
+                            continue;
+                        }
+                        proposals.add(new EditProposal(
+                                path,
+                                0L,
+                                parsed.proposal().newText(),
+                                instruction,
+                                EditOperation.CREATE));
                         continue;
                     }
                     VirtualFile file = WorkspaceFileReader.resolve(project, path);

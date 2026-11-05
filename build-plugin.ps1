@@ -105,7 +105,7 @@ try {
         throw "Gradle build failed with exit code $LASTEXITCODE."
     }
 
-    $zip = Join-Path $project "build\distributions\jentor-2.0.0.zip"
+    $zip = Join-Path $project "build\distributions\jentor-2.1.0.zip"
     if (Test-Path -LiteralPath $zip) {
         Write-Host ""
         Write-Host "Plugin ZIP: $zip"
