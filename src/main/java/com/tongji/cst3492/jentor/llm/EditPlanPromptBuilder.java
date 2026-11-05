@@ -10,6 +10,7 @@ public final class EditPlanPromptBuilder {
             String question,
             String previousAnalysis,
             String activeFile,
+            String activeFileContent,
             List<WorkspaceOutline> workspaceFiles,
             String language) {
         boolean zh = "zh".equals(language);
@@ -53,6 +54,9 @@ public final class EditPlanPromptBuilder {
 
         StringBuilder user = new StringBuilder("ACTIVE FILE:\n")
                 .append(activeFile == null || activeFile.isBlank() ? "(none)" : activeFile)
+                .append("\n\nACTIVE FILE CONTENT:\n")
+                .append(activeFileContent == null || activeFileContent.isBlank()
+                        ? "(none)" : activeFileContent)
                 .append("\n\nPREVIOUS ASSISTANT ANALYSIS:\n")
                 .append(previousAnalysis == null || previousAnalysis.isBlank()
                         ? "(none)" : previousAnalysis)

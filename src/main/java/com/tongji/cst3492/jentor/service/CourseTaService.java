@@ -405,8 +405,26 @@ public final class CourseTaService {
                             List.of(),
                             "");
                 } else {
+                    String activeContent = "";
+                    VirtualFile activeVirtualFile =
+                            WorkspaceFileReader.resolve(project, activeFile);
+                    if (activeVirtualFile != null
+                            && activeVirtualFile.isValid()
+                            && !activeVirtualFile.isDirectory()) {
+                        activeContent = ReadAction.computeBlocking(
+                                () -> WorkspaceFileReader.textOf(activeVirtualFile));
+                    }
+                    if (activeContent != null && activeContent.length() > 8_000) {
+                        activeContent = activeContent.substring(0, 8_000)
+                                + "\n[truncated]";
+                    }
                     List<ChatMessage> plannerMessages = new EditPlanPromptBuilder().build(
-                            question, previousAnalysis, activeFile, candidates, language);
+                            question,
+                            previousAnalysis,
+                            activeFile,
+                            activeContent,
+                            candidates,
+                            language);
                     String plannerReply = chatClient(false).complete(
                             planConfig, plannerMessages, token);
                     token.throwIfCancelled();
