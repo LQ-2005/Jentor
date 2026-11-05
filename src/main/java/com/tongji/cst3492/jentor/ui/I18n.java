@@ -75,10 +75,12 @@ public final class I18n {
                     : "No sufficiently relevant course excerpts were retrieved";
             case "footnotePrefix" -> zh ? "注：" : "Note: ";
             case "attachedFiles" -> zh ? "个文件" : "files";
-            case "askInWorkspace" -> zh ? "在本工作区中询问" : "Ask in this workspace";
+            case "askInWorkspace" -> zh
+                    ? "附加相关工作区代码" : "Include relevant workspace code";
             case "askInWorkspaceHint" -> zh
-                    ? "每次提问时附加项目结构和相关代码摘录"
-                    : "Include the project structure and relevant code excerpts";
+                    ? "自动附加项目结构、活动文件和与问题相关的源码；不会发送整个工作区"
+                    : "Include the project outline, active file and relevant source code; "
+                    + "the entire workspace is not sent";
             case "mockMode" -> "Mock";
             case "onlineMode" -> zh ? "在线模型" : "Online model";
             case "onlineModeHint" -> zh

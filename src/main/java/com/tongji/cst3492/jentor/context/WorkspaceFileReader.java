@@ -32,6 +32,25 @@ public final class WorkspaceFileReader {
      *         excluded, unsupported, too large or unreadable.
      */
     public static CodeFileSnapshot read(Project project, VirtualFile file) {
+        return readInternal(project, file, false, "", CodeFilePolicy.MAX_CHARS_PER_FILE);
+    }
+
+    /**
+     * Reads source or configuration context for an automatic analysis request.
+     * Small files are kept whole. Large files use method/range-aware selection so
+     * a bug near the end of a file is not silently omitted by prefix truncation.
+     */
+    public static CodeFileSnapshot readForContext(
+            Project project, VirtualFile file, String question, int maxChars) {
+        return readInternal(project, file, true, question, maxChars);
+    }
+
+    private static CodeFileSnapshot readInternal(
+            Project project,
+            VirtualFile file,
+            boolean readableConfig,
+            String question,
+            int maxChars) {
         if (project == null || file == null || !file.isValid() || file.isDirectory()) {
             return null;
         }
@@ -48,7 +67,9 @@ public final class WorkspaceFileReader {
             return null;
         }
         String path = projectRelativePath(project, file);
-        if (!CodeFilePolicy.isSupported(path)) {
+        if (readableConfig
+                ? !CodeFilePolicy.isReadableContext(path)
+                : !CodeFilePolicy.isSupported(path)) {
             return null;
         }
         if (file.getLength() > MAX_BYTES) {
@@ -61,7 +82,45 @@ public final class WorkspaceFileReader {
         if (CodeFilePolicy.containsLikelySecret(text)) {
             return null;
         }
-        return CodeFilePolicy.snapshot(path, file.getFileType().getName(), text);
+        if (!readableConfig) {
+            return CodeFilePolicy.snapshot(path, file.getFileType().getName(), text);
+        }
+
+        String normalized = text.replace("\r\n", "\n").replace('\r', '\n');
+        int totalLines = countLines(normalized);
+        if (normalized.length() <= maxChars) {
+            return new CodeFileSnapshot(
+                    path,
+                    file.getName(),
+                    file.getFileType().getName(),
+                    1,
+                    totalLines,
+                    totalLines,
+                    normalized,
+                    false);
+        }
+        String excerpt = SmartCodeExcerpt.render(normalized, question, maxChars);
+        return new CodeFileSnapshot(
+                path,
+                file.getName(),
+                file.getFileType().getName(),
+                1,
+                totalLines,
+                totalLines,
+                excerpt,
+                true);
+    }
+
+    private static int countLines(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        String[] lines = text.split("\n", -1);
+        int count = lines.length;
+        if (count > 0 && lines[count - 1].isEmpty()) {
+            count--;
+        }
+        return Math.max(1, count);
     }
 
     private static boolean isUnderProjectDir(Project project, VirtualFile file) {

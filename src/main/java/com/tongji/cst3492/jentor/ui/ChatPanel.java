@@ -153,6 +153,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private MessageView welcomeMessage;
     private String lastAssistantTextForIntent = "";
     private String lastEditStatus = "";
+    private CodeContext lastAnalysisContext = CodeContext.empty();
     private Conversation currentConversation;
     private String displayedLanguage;
     private boolean syncingLanguageSelection;
@@ -544,12 +545,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         setProgressText(I18n.t(currentLanguage(), "editGenerating"));
         EditorTarget editor = selectedEditorTarget();
         String activeFile = editor == null ? "" : editor.path();
+        CodeContext previousAnalysisContext = assistantAdvice == null
+                || assistantAdvice.isBlank()
+                ? CodeContext.empty() : lastAnalysisContext;
         EditBatchRequest request = service.prepareEditBatch(
                 visibleInstruction,
                 assistantAdvice == null ? "" : assistantAdvice,
                 forcedTarget == null ? "" : forcedTarget,
                 targetHints == null ? List.of() : targetHints,
                 activeFile,
+                pendingContextSnapshot(),
+                previousAnalysisContext,
                 currentLanguage());
         currentEditRequest = request;
         request.future().whenComplete((result, error) ->
@@ -765,6 +771,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         CodeContext codeContext = pendingContextSnapshot();
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
         String sentAttachmentSummary = attachmentSummary();
+        EditorTarget currentEditor = selectedEditorTarget();
+        String activeFilePath = currentEditor == null ? "" : currentEditor.path();
         long askedAt = System.currentTimeMillis();
 
         busy = true;
@@ -787,7 +795,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         if (generation == requestGeneration && busy) {
                             setProgressText(stage);
                         }
-                    }), createSink(generation), includeWorkspace);
+                    }), createSink(generation), includeWorkspace, activeFilePath);
         } catch (RuntimeException error) {
             streamTimer.stop();
             streamState = null;
@@ -815,6 +823,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     if (error == null) {
                         finishStreamCard(answer);
                         lastAssistantTextForIntent = answer.text();
+                        if (analyze) {
+                            lastAnalysisContext = request.effectiveContext().getNow(
+                                    CodeContext.empty());
+                        }
                         if (answer.citationStatus() != CitationStatus.FAILED) {
                             rememberTurn(question, answer.text());
                             recordCompletedTurn(
@@ -1316,6 +1328,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingCodeEditRequested = false;
         lastAssistantTextForIntent = "";
         lastEditStatus = "";
+        lastAnalysisContext = CodeContext.empty();
         pendingFiles.clear();
         attachmentBar.setVisible(false);
         input.setText("");
@@ -1522,6 +1535,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         pendingEditTargetPath = null;
         pendingCodeEditRequested = false;
         lastEditStatus = "";
+        lastAnalysisContext = CodeContext.empty();
         pendingFiles.clear();
         attachmentBar.setVisible(false);
         transcriptPanel.removeAll();

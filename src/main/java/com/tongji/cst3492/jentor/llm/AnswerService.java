@@ -2,6 +2,7 @@ package com.tongji.cst3492.jentor.llm;
 
 import com.tongji.cst3492.jentor.index.Retriever;
 import com.tongji.cst3492.jentor.index.CourseGlossary;
+import com.tongji.cst3492.jentor.context.WorkspaceContextBuilder;
 import com.tongji.cst3492.jentor.model.CodeContext;
 import com.tongji.cst3492.jentor.model.RetrievedChunk;
 
@@ -21,10 +22,12 @@ public final class AnswerService {
      * so the answer must say the snapshot may have drifted from the current file.
      */
     public static final String CONTEXT_NOTE =
-            "Workspace files are a snapshot captured when they were attached; if the files "
-                    + "changed afterwards, this answer may not match the current code.";
+            "Workspace files are a request-time snapshot. If the files changed while the "
+                    + "answer was generated, this answer may not match the current code; "
+                    + "omitted-line markers identify code that was outside the context budget.";
     public static final String CONTEXT_NOTE_ZH =
-            "回答所依据的工作区代码是附加时抓取的快照；若此后修改了文件，回答内容可能与当前代码不一致。";
+            "回答所依据的工作区代码是本次请求生成快照时读取的内容；若随后修改了文件，"
+                    + "回答可能与当前代码不一致。标注为“omitted lines”的行段表示未纳入上下文。";
     /** Shown when the injected workspace outline is older than the files on disk. */
     public static final String WORKSPACE_STALE_NOTE =
             "The workspace changed after the project outline was built, so this answer may be "
@@ -213,6 +216,11 @@ public final class AnswerService {
         StringBuilder note = new StringBuilder();
         if (codeContext.hasFiles()) {
             note.append(zh ? CONTEXT_NOTE_ZH : CONTEXT_NOTE);
+            String summary = WorkspaceContextBuilder.summary(codeContext, zh);
+            if (!summary.isBlank()) {
+                note.append(zh ? " 本次上下文：" : " Source context: ")
+                        .append(summary).append('.');
+            }
         }
         if (codeContext.workspace().stale()) {
             if (note.length() > 0) {

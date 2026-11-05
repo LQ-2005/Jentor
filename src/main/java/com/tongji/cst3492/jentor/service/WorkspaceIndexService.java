@@ -111,25 +111,24 @@ public final class WorkspaceIndexService implements Disposable {
      * takes effect even on the first question. Must be called off the EDT.
      */
     public WorkspaceContext contextForBlocking(String question) {
-        WorkspaceIndex local = index;
-        if (local == null) {
-            synchronized (this) {
-                local = index;
-                if (local == null) {
-                    local = ReadAction.computeBlocking(() -> WorkspaceIndexBuilder.build(project));
-                    WorkspaceIndexStore.save(project, local);
-                    index = local;
-                    stale = false;
-                }
-            }
-        }
-        WorkspaceIndex resolved = local;
+        WorkspaceIndex resolved = ensureIndexBlocking();
         StringBuilder text = new StringBuilder(WorkspaceOutlineSelector.select(resolved, question));
         String excerpts = ReadAction.computeBlocking(() -> excerpts(resolved, question));
         if (!excerpts.isEmpty()) {
             text.append('\n').append(excerpts);
         }
-        return new WorkspaceContext(text.toString(), stale, local.size());
+        return new WorkspaceContext(text.toString(), stale, resolved.size());
+    }
+
+    /**
+     * Returns only the ranked project outline. Rich source snapshots are added by
+     * {@link com.tongji.cst3492.jentor.context.WorkspaceContextBuilder}; keeping
+     * the old prefix excerpts out of that path avoids duplicate, misleading code.
+     */
+    public WorkspaceContext outlineForBlocking(String question) {
+        WorkspaceIndex local = ensureIndexBlocking();
+        return new WorkspaceContext(
+                WorkspaceOutlineSelector.select(local, question), stale, local.size());
     }
 
     /** Non-blocking variant: empty until the index is ready. */
@@ -170,6 +169,23 @@ public final class WorkspaceIndexService implements Disposable {
             return "";
         }
         return "RELATED FILE CONTENT (reference only, lowest priority):\n" + result;
+    }
+
+    private WorkspaceIndex ensureIndexBlocking() {
+        WorkspaceIndex local = index;
+        if (local != null) {
+            return local;
+        }
+        synchronized (this) {
+            local = index;
+            if (local == null) {
+                local = ReadAction.computeBlocking(() -> WorkspaceIndexBuilder.build(project));
+                WorkspaceIndexStore.save(project, local);
+                index = local;
+                stale = false;
+            }
+        }
+        return local;
     }
 
     private VirtualFile resolve(String path) {

@@ -55,7 +55,8 @@ class WorkspaceFileInjectionTest {
         assertTrue(user.contains("src/main/java/demo/OrderService.java"), "file path missing");
         assertTrue(user.contains(MARKER), "file body missing");
         assertFalse(system.contains(MARKER), "the file body must stay in the user prompt");
-        assertEquals(AnswerService.CONTEXT_NOTE, answer.contextNote());
+        assertTrue(answer.contextNote().startsWith(AnswerService.CONTEXT_NOTE));
+        assertTrue(answer.contextNote().contains("OrderService.java"));
     }
 
     @Test

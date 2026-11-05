@@ -10,6 +10,7 @@ import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.EditTargetResolver;
+import com.tongji.cst3492.jentor.context.WorkspaceContextBuilder;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.llm.ChatClient;
 import com.tongji.cst3492.jentor.llm.EditPromptBuilder;
@@ -174,6 +175,18 @@ public final class CourseTaService {
             Consumer<String> stageListener,
             StreamSink streamSink,
             boolean includeWorkspace) {
+        return ask(question, codeContext, history, stageListener, streamSink,
+                includeWorkspace, "");
+    }
+
+    public ChatRequest ask(
+            String question,
+            CodeContext codeContext,
+            List<ChatMessage> history,
+            Consumer<String> stageListener,
+            StreamSink streamSink,
+            boolean includeWorkspace,
+            String activeFile) {
         TaSettings settings = TaSettings.getInstance();
         TaSettings.State state = settings.getState();
         boolean mock = state.useMockModel;
@@ -199,12 +212,28 @@ public final class CourseTaService {
         StreamSink sink = state.streamOutput ? streamSink : StreamSink.NONE;
         CancellationToken token = new CancellationToken();
         CompletableFuture<Answer> result = new CompletableFuture<>();
+        CompletableFuture<CodeContext> effectiveContextResult = new CompletableFuture<>();
         Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
             try {
                 token.throwIfCancelled();
-                CodeContext effectiveContext = includeWorkspace
-                        ? codeContext.withWorkspace(workspaceContext(question))
-                        : codeContext;
+                CodeContext effectiveContext = codeContext;
+                if (includeWorkspace) {
+                    WorkspaceIndexService indexService =
+                            project.getService(WorkspaceIndexService.class);
+                    WorkspaceContext outline = indexService == null
+                            ? WorkspaceContext.empty()
+                            : indexService.outlineForBlocking(question);
+                    effectiveContext = codeContext.withWorkspace(outline);
+                    if (indexService != null) {
+                        effectiveContext = WorkspaceContextBuilder.enrich(
+                                project,
+                                indexService.getIndex(),
+                                question,
+                                activeFile,
+                                effectiveContext);
+                    }
+                }
+                effectiveContextResult.complete(effectiveContext);
                 Answer answer = answerService.answer(
                         question,
                         effectiveContext,
@@ -221,11 +250,13 @@ public final class CourseTaService {
                 result.complete(answer);
             } catch (CancellationException cancelled) {
                 result.cancel(false);
+                effectiveContextResult.cancel(false);
             } catch (Throwable error) {
                 result.completeExceptionally(error);
+                effectiveContextResult.completeExceptionally(error);
             }
         });
-        return new ChatRequest(result, task, token);
+        return new ChatRequest(result, task, token, effectiveContextResult);
     }
 
     public void setPendingContext(CodeContext context) {
@@ -352,6 +383,36 @@ public final class CourseTaService {
             List<String> targetHints,
             String activeFile,
             String language) {
+        return prepareEditBatch(question, previousAnalysis, forcedTarget, targetHints,
+                activeFile, CodeContext.empty(), CodeContext.empty(), language);
+    }
+
+    /**
+     * Plans against one request-time source snapshot. Explicit attachments and the
+     * active file are resolved before planning, so the planner no longer sees only
+     * the first 8000 characters or bare structure for every other file.
+     */
+    public EditBatchRequest prepareEditBatch(
+            String question,
+            String previousAnalysis,
+            String forcedTarget,
+            List<String> targetHints,
+            String activeFile,
+            CodeContext requestContext,
+            String language) {
+        return prepareEditBatch(question, previousAnalysis, forcedTarget, targetHints,
+                activeFile, requestContext, CodeContext.empty(), language);
+    }
+
+    public EditBatchRequest prepareEditBatch(
+            String question,
+            String previousAnalysis,
+            String forcedTarget,
+            List<String> targetHints,
+            String activeFile,
+            CodeContext requestContext,
+            CodeContext previousAnalysisContext,
+            String language) {
         TaSettings settings = TaSettings.getInstance();
         TaSettings.State state = settings.getState();
         boolean mock = state.useMockModel;
@@ -382,6 +443,26 @@ public final class CourseTaService {
                 String signal = question + "\n" + (previousAnalysis == null ? "" : previousAnalysis)
                         + "\n" + String.join(" ", targetHints == null ? List.of() : targetHints);
                 List<WorkspaceOutline> candidates = candidates(index, signal);
+                CodeContext sourceContext = WorkspaceContextBuilder.enrich(
+                        project,
+                        index,
+                        signal,
+                        activeFile,
+                        requestContext == null ? CodeContext.empty() : requestContext,
+                        previousAnalysisContext == null
+                                ? List.of()
+                                : previousAnalysisContext.files().stream()
+                                .map(CodeFileSnapshot::path).toList());
+                List<String> changedAfterAnalysis = WorkspaceContextBuilder.changedPaths(
+                        previousAnalysisContext, sourceContext);
+                String effectivePreviousAnalysis = previousAnalysis == null
+                        ? "" : previousAnalysis;
+                if (!changedAfterAnalysis.isEmpty()) {
+                    effectivePreviousAnalysis += "\n\nSOURCE CHANGED AFTER ANALYSIS:\n"
+                            + String.join("\n", changedAfterAnalysis)
+                            + "\nRe-check the latest code before carrying an earlier "
+                            + "suggestion into this edit.";
+                }
                 EditPlan plan;
                 if (mock || forcedTarget != null && !forcedTarget.isBlank()) {
                     String target = EditGuard.normalizeRelativePath(
@@ -401,29 +482,17 @@ public final class CourseTaService {
                             List.of(new EditPlanEntry(
                                     target,
                                     question + "\n"
-                                            + (previousAnalysis == null ? "" : previousAnalysis))),
+                                            + effectivePreviousAnalysis)),
                             List.of(),
                             "");
                 } else {
-                    String activeContent = "";
-                    VirtualFile activeVirtualFile =
-                            WorkspaceFileReader.resolve(project, activeFile);
-                    if (activeVirtualFile != null
-                            && activeVirtualFile.isValid()
-                            && !activeVirtualFile.isDirectory()) {
-                        activeContent = ReadAction.computeBlocking(
-                                () -> WorkspaceFileReader.textOf(activeVirtualFile));
-                    }
-                    if (activeContent != null && activeContent.length() > 8_000) {
-                        activeContent = activeContent.substring(0, 8_000)
-                                + "\n[truncated]";
-                    }
                     List<ChatMessage> plannerMessages = new EditPlanPromptBuilder().build(
                             question,
-                            previousAnalysis,
+                            effectivePreviousAnalysis,
                             activeFile,
-                            activeContent,
+                            "",
                             candidates,
+                            sourceContext.files(),
                             language);
                     String plannerReply = chatClient(false).complete(
                             planConfig, plannerMessages, token);
@@ -467,7 +536,7 @@ public final class CourseTaService {
                         }
                         String instruction = question
                                 + "\n\nPrevious analysis:\n"
-                                + (previousAnalysis == null ? "" : previousAnalysis)
+                                + effectivePreviousAnalysis
                                 + "\n\nPlanned new file:\n"
                                 + planned.instruction();
                         List<ChatMessage> editMessages = new EditPromptBuilder().buildNewFile(
@@ -525,7 +594,7 @@ public final class CourseTaService {
                     }
                     String instruction = question
                             + "\n\nPrevious analysis:\n"
-                            + (previousAnalysis == null ? "" : previousAnalysis)
+                            + effectivePreviousAnalysis
                             + "\n\nPlanned changes for this file:\n"
                             + planned.instruction();
                     List<ChatMessage> editMessages = new EditPromptBuilder().build(

@@ -22,6 +22,10 @@ class CodeFilePolicyTest {
         assertFalse(CodeFilePolicy.isSupported("image.png"));
         assertFalse(CodeFilePolicy.isSupported("Makefile"));
         assertFalse(CodeFilePolicy.isSupported(""));
+        assertTrue(CodeFilePolicy.isReadableContext("src/main/resources/application.properties"));
+        assertTrue(CodeFilePolicy.isReadableContext("src/main/resources/application.yml"));
+        assertTrue(CodeFilePolicy.isReadableContext("pom.xml"));
+        assertFalse(CodeFilePolicy.isSupported("src/main/resources/application.properties"));
     }
 
     @Test

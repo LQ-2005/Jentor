@@ -111,41 +111,44 @@ This is the F0 baseline required for every group.
   formats such as `.properties`, `.xml` and `.json` are refused, obvious secret
   assignments and private keys are blocked, and up to 5 files are attached. Each
   file is capped at 400 lines or 4000 characters.
-- When **Ask in this workspace** is enabled at the bottom-left of the composer,
-  every question also carries a structural outline of the project: file paths, type
-  declarations and member signatures, plus a bounded excerpt (120 lines or 1800
-  characters) of the two most relevant files, so a question about code can
-  actually be answered. The outline comes from an index built in the background
-  when a project opens and cached on disk under the IDE system directory; it
-  never contains method bodies, is capped at six files and 4000 characters, and
-  is ranked by file path, type and member names, falling back to the most
-  recently modified files when the question mentions no identifier.
+- When **Include relevant workspace code** is enabled at the bottom-left of the
+  composer, Jentor builds a bounded request-time source snapshot: the active file,
+  explicitly attached files, up to four ranked source candidates and relevant
+  read-only configuration files. Small files are sent whole. Large files keep the
+  relevant complete methods, important declarations and the file tail, with
+  explicit `[omitted lines ...]` markers instead of prefix-only truncation.
+  `.properties`, YAML, XML and JSON configuration can be read as context but
+  remain protected from AI writes.
 - A background monitor keeps that index current instead of asking the user to
   reload: VFS changes are debounced, only the changed files are re-parsed and
   re-saved, and a two-minute sweep catches changes the listener missed (for
   example a Git branch switch). The answer only says the structure may be
   outdated while a refresh is still pending.
-- Files are read once, when they are attached, and never re-read. The file
-  section is the lowest-priority context after the course material, the selected
-  code and the question, so a stale or unrelated file cannot override a grounded
-  answer. Every answer that used attached files ends with a footnote saying the
-  code is a snapshot and may differ from the current file.
+- Explicitly attached files retain their capture-time snapshot semantics.
+  Automatically selected files are read afresh for each request. Every answer
+  that used source files ends with a footnote listing how many files were
+  complete versus method-aware excerpts and naming the files that were included.
 - **Conversational code editing**: ask naturally ("fix the null check in
   cancelOrder", "refactor paymentFee into a strategy"). Jentor automatically
   uses the active editor, selected code, names in the question, or workspace
   index to locate the likely file, so attaching a file or enabling an edit-mode
   checkbox is not required. A follow-up such as "修吧" or "按这个改" can adopt
-  code issues identified in the previous answer. If a model refusal names a
-  different existing workspace `.java` file, Jentor relocates once and retries
-  automatically. Every proposal still opens in IntelliJ's built-in side-by-side
+  code issues identified in the previous answer. Every proposal still opens in
+  IntelliJ's built-in side-by-side
   diff; applying is one undoable command, stale suggestions are disabled, and
   read-only or syntactically invalid Java files cannot be written.
-- Multi-file edits are planned before any code is generated. The planner selects
-  only the relevant workspace files, records read-only or invalid exclusions,
-  and produces file-specific instructions. Jentor validates every proposal and
+- Multi-file edits are planned with the same request-time source snapshot
+  contract as analysis. The planner sees complete small files and method-aware excerpts for
+  large files rather than only the first 8000 characters. It selects only the
+  relevant workspace files, records read-only or invalid exclusions, and produces
+  file-specific instructions. Jentor validates every proposal and
   shows one review window with a native two-pane diff tab per file.
   **Apply all** preflights the whole batch and writes it as one undoable command;
   one stale or invalid file prevents partial writes.
+- When an edit adopts the previous analysis, Jentor carries the file set from
+  that analysis into a fresh edit snapshot. Complete files are compared with the
+  analyzed version; changed files are marked as source-changed in the planner
+  prompt so an outdated suggestion is not applied blindly.
 - When a refactor requires new classes or interfaces, the planner may emit a
   `CREATE` operation. New files are first shown in the native diff against an
   empty document, with an explicit `[NEW]` tab. Creation is allowed only inside
@@ -157,8 +160,10 @@ This is the F0 baseline required for every group.
   than matching fixed keywords. Status questions such as "修改了哪些？" therefore
   answer from the latest applied edit instead of starting another edit. Mock mode
   uses a deterministic offline router only for tests and demonstration.
-- Explicit selected code, attached files and the optional workspace outline share
-  a hard 16,000-character IDE-context budget. Workspace content is marked as
+- Explicit selected code, the request-time source snapshot and the optional
+  workspace outline share a hard 72,000-character IDE-context budget. A single
+  automatic file is capped at 48,000 characters of full or method-aware content,
+  and the snapshot is capped at 64,000 characters. Workspace content is marked as
   untrusted data so instructions embedded in source comments cannot override the
   system rules.
 - Settings for an OpenAI-compatible chat endpoint. The API key is stored with
@@ -203,7 +208,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-2.1.0.zip
+build\distributions\jentor-2.1.1.zip
 ```
 
 Install it into IntelliJ:
@@ -235,8 +240,9 @@ In IntelliJ:
    optional shortcut. Jentor plans the relevant workspace files, shows skipped
    read-only files, and opens one native diff tab per changed file. Review the
    batch and press **Apply all** (undo with `Ctrl+Z`) or **Cancel**.
-10. Tick **Ask in this workspace** at the bottom-left of the composer to add the project
-   outline to every question; clear it to send course context only.
+10. Tick **Include relevant workspace code** at the bottom-left of the composer to
+    add the project outline and a request-time source snapshot; clear it to send
+    course context only.
 11. Use **History** to reopen an earlier conversation, or **New chat** to start a
     separate conversation. Deleting history entries does not delete course files.
 

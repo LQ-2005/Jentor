@@ -1,5 +1,6 @@
 package com.tongji.cst3492.jentor.llm;
 
+import com.tongji.cst3492.jentor.model.CodeFileSnapshot;
 import com.tongji.cst3492.jentor.model.WorkspaceOutline;
 
 import java.util.List;
@@ -12,6 +13,18 @@ public final class EditPlanPromptBuilder {
             String activeFile,
             String activeFileContent,
             List<WorkspaceOutline> workspaceFiles,
+            String language) {
+        return build(question, previousAnalysis, activeFile, activeFileContent,
+                workspaceFiles, List.of(), language);
+    }
+
+    public List<ChatMessage> build(
+            String question,
+            String previousAnalysis,
+            String activeFile,
+            String activeFileContent,
+            List<WorkspaceOutline> workspaceFiles,
+            List<CodeFileSnapshot> contextFiles,
             String language) {
         boolean zh = "zh".equals(language);
         String system = """
@@ -37,6 +50,11 @@ public final class EditPlanPromptBuilder {
                   package directory implied by those files.
                 - Do not include read-only files in files; put them in skipped.
                 - Do not invent files or paths.
+                - Treat SOURCE SNAPSHOT as the current request-time code. It may contain
+                  explicit [lines ...] and [omitted lines ...] markers. Do not assume an
+                  omitted method has disappeared from the file.
+                - If the target method is present, plan against that exact method rather
+                  than asking the user to paste the file again.
                 - Use CREATE only when a new source file is genuinely required.
                 - CREATE paths must use an existing project package directory and must not exist.
                 - If the latest request adopts a previous analysis, carry all relevant issues
@@ -57,6 +75,10 @@ public final class EditPlanPromptBuilder {
                 .append("\n\nACTIVE FILE CONTENT:\n")
                 .append(activeFileContent == null || activeFileContent.isBlank()
                         ? "(none)" : activeFileContent)
+                .append("\n\nSOURCE SNAPSHOT:\n")
+                .append(new PromptBuilder().buildWorkspaceFiles(
+                        contextFiles == null ? List.of() : contextFiles,
+                        PromptBuilder.MAX_IDE_CONTEXT_CHARS))
                 .append("\n\nPREVIOUS ASSISTANT ANALYSIS:\n")
                 .append(previousAnalysis == null || previousAnalysis.isBlank()
                         ? "(none)" : previousAnalysis)

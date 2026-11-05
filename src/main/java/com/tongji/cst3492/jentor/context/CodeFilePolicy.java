@@ -30,6 +30,9 @@ public final class CodeFilePolicy {
 
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
             "java", "kt", "groovy", "gradle", "kts");
+    private static final Set<String> READABLE_CONTEXT_EXTENSIONS = Set.of(
+            "java", "kt", "groovy", "gradle", "kts",
+            "properties", "yml", "yaml", "xml", "json");
 
     private static final List<String> SENSITIVE_NAME_PARTS = List.of(
             ".env", "secret", "credential", ".pem", ".key", ".p12", ".jks", "id_rsa");
@@ -45,6 +48,18 @@ public final class CodeFilePolicy {
 
     /** Whether a project-relative path may be attached at all. */
     public static boolean isSupported(String path) {
+        return isAllowed(path, SUPPORTED_EXTENSIONS);
+    }
+
+    /**
+     * Configuration files are useful read-only context but remain forbidden as
+     * AI write targets through {@link #isSupported(String)}.
+     */
+    public static boolean isReadableContext(String path) {
+        return isAllowed(path, READABLE_CONTEXT_EXTENSIONS);
+    }
+
+    private static boolean isAllowed(String path, Set<String> extensions) {
         if (path == null || path.isBlank()) {
             return false;
         }
@@ -54,7 +69,7 @@ public final class CodeFilePolicy {
                 return false;
             }
         }
-        return SUPPORTED_EXTENSIONS.contains(extension(path));
+        return extensions.contains(extension(path));
     }
 
     /**

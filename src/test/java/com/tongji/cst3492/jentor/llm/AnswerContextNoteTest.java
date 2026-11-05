@@ -38,13 +38,15 @@ class AnswerContextNoteTest {
     void attachedFilesExplainThatTheSnapshotMayDrift() throws IOException {
         Answer answer = ask(withFile(), "en");
 
-        assertEquals(AnswerService.CONTEXT_NOTE, answer.contextNote());
+        assertTrue(answer.contextNote().startsWith(AnswerService.CONTEXT_NOTE));
+        assertTrue(answer.contextNote().contains("ArrayDemo.java"));
         assertTrue(answer.contextNote().contains("snapshot"));
     }
 
     @Test
     void chineseModeExplainsTheDriftInChinese() throws IOException {
-        assertEquals(AnswerService.CONTEXT_NOTE_ZH, ask(withFile(), "zh").contextNote());
+        assertTrue(ask(withFile(), "zh").contextNote()
+                .startsWith(AnswerService.CONTEXT_NOTE_ZH));
     }
 
     private static CodeContext withFile() {
