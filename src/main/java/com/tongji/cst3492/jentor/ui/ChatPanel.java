@@ -21,6 +21,7 @@ import com.tongji.cst3492.jentor.conversation.Conversation;
 import com.tongji.cst3492.jentor.conversation.ConversationMessage;
 import com.tongji.cst3492.jentor.conversation.ConversationStore;
 import com.tongji.cst3492.jentor.conversation.ConversationSummary;
+import com.tongji.cst3492.jentor.conversation.ConversationTurn;
 import com.tongji.cst3492.jentor.llm.Answer;
 import com.tongji.cst3492.jentor.llm.ChatMessage;
 import com.tongji.cst3492.jentor.llm.CitationStatus;
@@ -83,7 +84,6 @@ import java.awt.event.InputMethodListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -533,7 +533,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     /** Plans and generates all file proposals, then opens one review window. */
     private void sendEdit(
-            String visibleInstruction,
+            ConversationTurn turn,
+            String instruction,
             String forcedTarget,
             String assistantAdvice,
             List<String> targetHints) {
@@ -549,7 +550,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 || assistantAdvice.isBlank()
                 ? CodeContext.empty() : lastAnalysisContext;
         EditBatchRequest request = service.prepareEditBatch(
-                visibleInstruction,
+                instruction,
                 assistantAdvice == null ? "" : assistantAdvice,
                 forcedTarget == null ? "" : forcedTarget,
                 targetHints == null ? List.of() : targetHints,
@@ -570,14 +571,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         busy = false;
                         setProgressText("");
                         updateSendButton();
-                        appendError(friendlyError(error), currentLanguage(), visibleInstruction);
+                        appendError(friendlyError(error), currentLanguage(), turn.question());
                         return;
                     }
                     if (result.hasProposals()) {
                         busy = false;
                         setProgressText("");
                         updateSendButton();
-                        openEditBatchReview(result, visibleInstruction);
+                        openEditBatchReview(result, turn, instruction, generation);
                         return;
                     }
                     busy = false;
@@ -585,14 +586,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                     updateSendButton();
                     String message = result.error().isBlank()
                             ? I18n.t(currentLanguage(), "editNoChange") : result.error();
-                    lastEditStatus = message;
-                    appendAssistantClarification(message);
+                    completeLocalTurn(turn, message, true);
                 }));
     }
 
-    private void openEditBatchReview(EditBatchResult batch, String instruction) {
+    private void openEditBatchReview(
+            EditBatchResult batch, ConversationTurn turn, String instruction, int generation) {
         EditBatchReviewDialog dialog = new EditBatchReviewDialog(project, batch);
         boolean accepted = dialog.showAndGet();
+        if (disposed || generation != requestGeneration) {
+            return;
+        }
         if (accepted && dialog.applyResult() != null) {
             if (dialog.applyResult().status() == EditBatchApplyResult.Status.APPLIED) {
                 String summary = I18n.t(currentLanguage(), "editApplied") + "\n"
@@ -600,20 +604,13 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         .map(path -> "- " + path).reduce("", (left, right) ->
                                 left + (left.isBlank() ? "" : "\n") + right)
                         + "\n- " + instruction;
-                lastEditStatus = summary;
-                appendAssistantClarification(summary);
-                history.add(new ChatMessage("assistant", summary));
-                while (history.size() > 8) {
-                    history.remove(0);
-                }
+                completeLocalTurn(turn, summary, true);
             } else if (dialog.applyResult().status()
                     == EditBatchApplyResult.Status.NO_CHANGE) {
-                lastEditStatus = I18n.t(currentLanguage(), "editNoChange");
-                appendAssistantClarification(lastEditStatus);
+                completeLocalTurn(turn, I18n.t(currentLanguage(), "editNoChange"), true);
             }
         } else if (!accepted) {
-            lastEditStatus = I18n.t(currentLanguage(), "editCancelled");
-            appendAssistantClarification(lastEditStatus);
+            completeLocalTurn(turn, I18n.t(currentLanguage(), "editCancelled"), true);
         }
     }
 
@@ -647,7 +644,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         if (question.isEmpty()) {
             return;
         }
-        appendMessage("user", question, false, true, attachmentSummary());
+        historyLoadGeneration++;
+        ConversationTurn turn = new ConversationTurn(
+                question, attachmentSummary(), System.currentTimeMillis());
+        appendMessage("user", question, false, true, turn.attachmentSummary());
         input.setText("");
         if (pendingCodeEditRequested) {
             EditorTarget editor = selectedEditorTarget();
@@ -656,19 +656,19 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                 forcedTarget = EditGuard.normalizeRelativePath(editor.path());
             }
             if (!forcedTarget.isBlank()) {
-                historyLoadGeneration++;
-                sendEdit(question, forcedTarget, "", List.of());
+                sendEdit(turn, question, forcedTarget, "", List.of());
                 return;
             }
             pendingCodeEditRequested = false;
             pendingEditTargetPath = null;
-            appendAssistantClarification(I18n.t(currentLanguage(), "editNoTarget"));
+            completeLocalTurn(turn, I18n.t(currentLanguage(), "editNoTarget"), false);
             return;
         }
-        startIntentRouting(question);
+        startIntentRouting(turn);
     }
 
-    private void startIntentRouting(String question) {
+    private void startIntentRouting(ConversationTurn turn) {
+        String question = turn.question();
         busy = true;
         int generation = ++requestGeneration;
         updateSendButton();
@@ -706,7 +706,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         appendError(friendlyError(error), currentLanguage(), question);
                         return;
                     }
-                    handleIntent(question, decision);
+                    handleIntent(turn, decision);
                 }));
     }
 
@@ -724,18 +724,18 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         return routeHistory;
     }
 
-    private void handleIntent(String question, RouteDecision decision) {
+    private void handleIntent(ConversationTurn turn, RouteDecision decision) {
+        String question = turn.question();
         if (decision.intent() == ConversationIntent.EDIT) {
             String advice = decision.usePreviousAnalysis()
                     ? lastAssistantTextForIntent : "";
-            historyLoadGeneration++;
             String instruction = decision.instruction().isBlank()
                     ? question : decision.instruction();
-            sendEdit(instruction, "", advice, decision.targetHints());
+            sendEdit(turn, instruction, "", advice, decision.targetHints());
             return;
         }
         if (decision.intent() == ConversationIntent.ANALYZE) {
-            submitChat(question, true, true);
+            submitChat(turn, true, true);
             return;
         }
         if (decision.intent() == ConversationIntent.STATUS) {
@@ -745,7 +745,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             String message = lastEditStatus.isBlank()
                     ? I18n.t(currentLanguage(), "editStatusNone")
                     : lastEditStatus;
-            appendAssistantClarification(message);
+            completeLocalTurn(turn, message, false);
             return;
         }
         if (decision.intent() == ConversationIntent.CLARIFY) {
@@ -755,25 +755,30 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             String message = decision.clarification().isBlank()
                     ? I18n.t(currentLanguage(), "intentClarify")
                     : decision.clarification();
-            appendAssistantClarification(message);
+            completeLocalTurn(turn, message, false);
             return;
         }
-        submitChat(question, TaSettings.getInstance().getState().workspaceContext, false);
+        submitChat(turn, TaSettings.getInstance().getState().workspaceContext, false);
     }
 
-    private void appendAssistantClarification(String message) {
+    private void completeLocalTurn(ConversationTurn turn, String message, boolean editResult) {
         appendMessage("assistant", message, false, false, "");
         lastAssistantTextForIntent = message;
+        if (editResult) {
+            lastEditStatus = message;
+        }
+        long answeredAt = System.currentTimeMillis();
+        recordCompletedTurn(turn, editResult
+                ? ConversationMessage.editResult(message, answeredAt)
+                : ConversationMessage.assistant(message, answeredAt));
     }
 
-    private void submitChat(String question, boolean includeWorkspace, boolean analyze) {
-        historyLoadGeneration++;
+    private void submitChat(ConversationTurn turn, boolean includeWorkspace, boolean analyze) {
+        String question = turn.question();
         CodeContext codeContext = pendingContextSnapshot();
         List<ChatMessage> historySnapshot = new ArrayList<>(history);
-        String sentAttachmentSummary = attachmentSummary();
         EditorTarget currentEditor = selectedEditorTarget();
         String activeFilePath = currentEditor == null ? "" : currentEditor.path();
-        long askedAt = System.currentTimeMillis();
 
         busy = true;
         int generation = ++requestGeneration;
@@ -828,13 +833,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                                     CodeContext.empty());
                         }
                         if (answer.citationStatus() != CitationStatus.FAILED) {
-                            rememberTurn(question, answer.text());
                             recordCompletedTurn(
-                                    question,
-                                    sentAttachmentSummary,
-                                    answer,
-                                    askedAt,
-                                    System.currentTimeMillis());
+                                    turn, ConversationMessage.assistant(
+                                            answer, System.currentTimeMillis()));
                         }
                     } else {
                         discardStreamCard();
@@ -1383,20 +1384,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     }
 
     private void recordCompletedTurn(
-            String question,
-            String sentAttachmentSummary,
-            Answer answer,
-            long askedAt,
-            long answeredAt) {
-        Conversation conversation = currentConversation;
-        if (conversation == null) {
-            conversation = Conversation.create(
-                    UUID.randomUUID().toString(), question, askedAt);
-        }
-        currentConversation = conversation.append(
-                ConversationMessage.user(question, askedAt, sentAttachmentSummary),
-                ConversationMessage.assistant(answer, answeredAt),
-                answeredAt);
+            ConversationTurn turn, ConversationMessage assistant) {
+        rememberTurn(turn.question(), assistant.content());
+        currentConversation = turn.appendTo(currentConversation, assistant);
         updateConversationTitle();
         persistConversationAsync(currentConversation);
     }
@@ -1547,6 +1537,9 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         message.attachmentSummary());
             } else if ("assistant".equals(message.role())) {
                 appendAnswer(message.toAnswer());
+                if (message.editResult()) {
+                    lastEditStatus = message.content();
+                }
             }
             history.add(message.toChatMessage());
         }

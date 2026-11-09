@@ -18,7 +18,8 @@ public record ConversationMessage(
         List<SourceReference> sources,
         List<String> warnings,
         String disclosure,
-        String contextNote) {
+        String contextNote,
+        boolean editResult) {
 
     public ConversationMessage {
         role = role == null ? "" : role;
@@ -36,7 +37,7 @@ public record ConversationMessage(
             String content, long timestamp, String attachmentSummary) {
         return new ConversationMessage(
                 "user", content, timestamp, attachmentSummary, false,
-                CitationStatus.NOT_APPLICABLE, List.of(), List.of(), "", "");
+                CitationStatus.NOT_APPLICABLE, List.of(), List.of(), "", "", false);
     }
 
     public static ConversationMessage assistant(Answer answer, long timestamp) {
@@ -50,7 +51,24 @@ public record ConversationMessage(
                 answer.sources(),
                 answer.warnings(),
                 answer.disclosure(),
-                answer.contextNote());
+                answer.contextNote(),
+                false);
+    }
+
+    public static ConversationMessage assistant(String text, long timestamp) {
+        return plainAssistant(text, timestamp, false);
+    }
+
+    /** Includes applied, cancelled and unchanged edits so status survives reopening. */
+    public static ConversationMessage editResult(String text, long timestamp) {
+        return plainAssistant(text, timestamp, true);
+    }
+
+    private static ConversationMessage plainAssistant(
+            String text, long timestamp, boolean editResult) {
+        return new ConversationMessage(
+                "assistant", text, timestamp, "", false,
+                CitationStatus.NOT_APPLICABLE, List.of(), List.of(), "", "", editResult);
     }
 
     public ChatMessage toChatMessage() {

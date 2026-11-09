@@ -338,6 +338,17 @@ A damaged index is rebuilt by scanning conversation files, while an unreadable
 individual file is skipped. Failed, cancelled and incomplete answers are not
 persisted.
 
+All completed reply paths share the same history writer, including code edits,
+status replies and clarification. `ConversationTurn` captures the original user
+question, attachment summary and send time before intent routing, so an edit
+instruction rewritten by the router does not replace the user's message. Edit
+review outcomes (applied, unchanged or dismissed) are saved as user/assistant
+pairs and marked with `ConversationMessage.editResult`. Restoring a conversation
+uses that marker to recover the latest edit status; old messages without it
+remain ordinary chat messages. Stopping an unfinished generation still does not
+create a completed turn. The send action invalidates pending history loads
+before routing, so an old restore cannot overwrite a newly started turn.
+
 ## Cancellation and state isolation
 
 Each request gets a `ChatRequest` with a request id, a `CancellationToken`, and
