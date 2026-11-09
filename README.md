@@ -70,7 +70,9 @@ This is the F0 baseline required for every group.
   restored when the tool window is opened again. The full-height history drawer
   shows title-only rows at a larger font, with a rounded hover background. It
   supports search, open, rename and delete. The most recent turns are still sent
-  to the LLM for multi-turn follow-ups.
+  to the LLM for multi-turn follow-ups. Edit outcomes (applied, rejected or
+  unchanged) are persisted as their own turns, so reopening a conversation still
+  shows which files a request touched.
 - Generation can be stopped. The request carries a cancellation token; the task
   and, where supported, the HTTP request are cancelled. Stale responses cannot
   update the UI or conversation memory.
@@ -168,9 +170,19 @@ This is the F0 baseline required for every group.
   system rules.
 - Settings for an OpenAI-compatible chat endpoint. The API key is stored with
   IntelliJ `PasswordSafe`, not in the project.
+- A completion that stops at the output token limit is never used as an edit. The
+  client retries with a doubled budget (4096 to 32768 tokens, at most twice),
+  restarting the completion instead of continuing a half-written file, and clears
+  the streamed preview before the retry. Reasoning models such as MiniMax M3 get
+  a raised budget for routing, edit plans and full-file edits, because their
+  thinking tokens count against the same output limit. If the retry is still
+  truncated, the edit fails with an explicit message and no file is written.
 - An "Import course index" action for importing a rebuilt `course-index.json`.
-- JUnit tests cover retrieval, citation validation, Markdown rendering and the
-  streamed re-render budget; the offline CLI harness checks retrieval quality.
+- JUnit tests cover retrieval, citation validation, the code-file policy, the
+  workspace snapshot and outline ranking, edit planning and validation,
+  conversation persistence, the LLM client's output-limit handling, Markdown
+  rendering and the streamed re-render budget; the offline CLI harness checks
+  retrieval quality.
 
 ## Quick start
 
