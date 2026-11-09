@@ -491,19 +491,12 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         configureModeMenu();
         updateModeSelector();
 
-        JPanel workspaceArea = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        workspaceArea.setOpaque(false);
-        workspaceArea.add(workspaceBox);
-
-        JPanel composerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        composerActions.setOpaque(false);
-        composerActions.add(modeButton);
-        composerActions.add(sendButton);
-
-        JPanel composerFooter = new JPanel(new BorderLayout(6, 0));
+        JPanel composerFooter = new JPanel(new ComposerFooterLayout(
+                workspaceBox, modeButton, sendButton, JBUI.scale(6)));
         composerFooter.setOpaque(false);
-        composerFooter.add(workspaceArea, BorderLayout.WEST);
-        composerFooter.add(composerActions, BorderLayout.EAST);
+        composerFooter.add(workspaceBox);
+        composerFooter.add(modeButton);
+        composerFooter.add(sendButton);
 
         ComposerPanel inputPanel = new ComposerPanel();
         JBScrollPane inputScroll = new JBScrollPane(input);
@@ -1672,7 +1665,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         String language = currentLanguage();
         boolean mock = TaSettings.getInstance().getState().useMockModel;
         String hint = I18n.t(language, mock ? "mockModeHint" : "onlineModeHint");
-        modeButton.setToolTipText(hint);
+        modeButton.setToolTipText(modeButton.getText() + " - " + hint);
         modeButton.getAccessibleContext().setAccessibleName(
                 modeButton.getText() + " - " + hint);
     }
