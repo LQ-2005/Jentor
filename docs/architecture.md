@@ -152,6 +152,24 @@ rather than mixing `Slide`.
 - Cancelling the token closes the response body, which interrupts the blocking
   read and surfaces as `CancellationException`.
 
+Reasoning models share the output budget between thinking and answer text.
+For the MiniMax M3 family, routing and edit planning therefore use at least 4096
+tokens, and full-file code generation uses at least 8192, preserving higher user
+settings. Other providers keep the configured initial budget, including lower
+limits required by small custom models. Routing and planning no longer impose
+their previous 600/1000-token caps. The router only classifies the request;
+implementation work belongs to the subsequent edit step. See the
+[MiniMax API documentation](https://platform.minimax.io/docs/api-reference/text-openai-api)
+for how reasoning contributes to the output limit.
+For both JSON and SSE responses, `finish_reason: length` (or `max_tokens`) rejects
+even nonempty partial output and retries the original messages at most twice.
+Each retry doubles the budget, with a 4096 minimum and a 32768 automatic ceiling;
+an already higher configured limit is never reduced. Stream previews are reset
+before retrying. Reasoning fields are never used as answer text or included in
+empty-answer diagnostics. Exhaustion reports the final token limit instead of
+passing truncated code to the edit parser. Settings accept limits up to 32768;
+the chosen limit must also be supported by the configured provider.
+
 `AnswerService` treats the deltas as a preview, never as the answer:
 
 - The general-knowledge path may prepend the fallback sentence and

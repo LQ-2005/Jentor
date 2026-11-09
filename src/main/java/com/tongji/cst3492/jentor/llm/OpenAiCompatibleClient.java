@@ -29,6 +29,9 @@ public final class OpenAiCompatibleClient implements ChatClient {
     private static final Duration STREAM_TIMEOUT = Duration.ofMinutes(5);
     private static final String DATA_PREFIX = "data:";
     private static final String DONE_MARKER = "[DONE]";
+    private static final int MAX_LENGTH_RETRIES = 2;
+    private static final int MIN_RETRY_TOKENS = 4_096;
+    private static final int MAX_RETRY_TOKENS = 32_768;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(CONNECT_TIMEOUT)
@@ -42,35 +45,25 @@ public final class OpenAiCompatibleClient implements ChatClient {
         token.throwIfCancelled();
         requireConfig(config);
 
-        HttpRequest request = buildRequest(config, messages, false);
-        token.throwIfCancelled();
-        CompletableFuture<HttpResponse<String>> future = httpClient.sendAsync(
-                request,
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        token.onCancel(() -> future.cancel(true));
-        HttpResponse<String> response;
-        try {
-            response = future.get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Generation cancelled", e);
-        } catch (CancellationException e) {
-            throw e;
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof CancellationException cancellation) {
-                throw cancellation;
+        LlmConfig attemptConfig = config;
+        for (int attempt = 0; ; attempt++) {
+            token.throwIfCancelled();
+            HttpResponse<String> response = send(
+                    buildRequest(attemptConfig, messages, false),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8), token);
+            token.throwIfCancelled();
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException(
+                        "LLM request failed with HTTP " + response.statusCode() + ": "
+                                + truncate(response.body(), 600));
             }
-            throw new IOException("LLM request failed", cause);
+            try {
+                return messageContent(response.body());
+            } catch (CompletionLimitException exhausted) {
+                token.throwIfCancelled();
+                attemptConfig = retryConfig(attemptConfig, attempt);
+            }
         }
-        token.throwIfCancelled();
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException(
-                    "LLM request failed with HTTP " + response.statusCode() + ": "
-                            + truncate(response.body(), 600));
-        }
-        return messageContent(response.body());
     }
 
     @Override
@@ -91,18 +84,28 @@ public final class OpenAiCompatibleClient implements ChatClient {
         token.throwIfCancelled();
         requireConfig(config);
 
-        HttpResponse<InputStream> response;
-        try {
-            response = httpClient.send(
-                    buildRequest(config, messages, true),
-                    HttpResponse.BodyHandlers.ofInputStream());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Generation cancelled", e);
-        } catch (IOException e) {
-            throw new IOException("LLM request failed: " + e.getMessage(), e);
+        LlmConfig attemptConfig = config;
+        for (int attempt = 0; ; attempt++) {
+            token.throwIfCancelled();
+            try {
+                return streamOnce(attemptConfig, messages, token, sink);
+            } catch (CompletionLimitException exhausted) {
+                token.throwIfCancelled();
+                attemptConfig = retryConfig(attemptConfig, attempt);
+                // A retry starts a fresh completion, not a continuation of partial code.
+                sink.reset();
+            }
         }
+    }
 
+    private String streamOnce(
+            LlmConfig config,
+            List<ChatMessage> messages,
+            CancellationToken token,
+            StreamSink sink) throws IOException {
+        HttpResponse<InputStream> response = send(
+                buildRequest(config, messages, true),
+                HttpResponse.BodyHandlers.ofInputStream(), token);
         InputStream body = response.body();
         token.onCancel(() -> closeQuietly(body));
         try {
@@ -132,15 +135,11 @@ public final class OpenAiCompatibleClient implements ChatClient {
             CancellationToken token,
             StreamSink sink) throws IOException {
         StringBuilder accumulated = new StringBuilder();
-        StringBuilder diagnostics = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(body, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 token.throwIfCancelled();
-                if (diagnostics.length() < 400 && !line.isBlank()) {
-                    diagnostics.append(line).append('\n');
-                }
                 if (line.isBlank() || line.startsWith(":")) {
                     continue;
                 }
@@ -162,9 +161,8 @@ public final class OpenAiCompatibleClient implements ChatClient {
                 sink.append(delta);
             }
         }
-        if (accumulated.length() == 0) {
-            throw new IOException("The LLM stream completed without content: "
-                    + truncate(diagnostics.toString(), 400));
+        if (accumulated.toString().isBlank()) {
+            throw missingContent();
         }
         return accumulated.toString();
     }
@@ -190,12 +188,12 @@ public final class OpenAiCompatibleClient implements ChatClient {
             // Some providers send keep-alive text that is not JSON.
             return null;
         }
-        JsonNode error = root.path("error");
-        if (error.isObject()) {
-            throw new IOException("LLM request failed: "
-                    + truncate(error.path("message").asText(error.toString()), 600));
+        if (root == null) {
+            return null;
         }
+        requireNoError(root);
         JsonNode choice = root.path("choices").path(0);
+        requireComplete(choice);
         JsonNode delta = choice.path("delta").path("content");
         if (delta.isTextual()) {
             return delta.asText();
@@ -213,14 +211,77 @@ public final class OpenAiCompatibleClient implements ChatClient {
             root = MAPPER.readTree(payload);
         } catch (IOException malformed) {
             throw new IOException(
-                    "The LLM response was not valid JSON: " + truncate(payload, 600), malformed);
+                    "The LLM response was not valid JSON.", malformed);
         }
-        JsonNode content = root.path("choices").path(0).path("message").path("content");
-        if (content.isMissingNode() || content.isNull() || content.asText().isBlank()) {
-            throw new IOException(
-                    "The LLM response did not contain message content: " + truncate(payload, 600));
+        if (root == null) {
+            throw missingContent();
+        }
+        requireNoError(root);
+        JsonNode choice = root.path("choices").path(0);
+        requireComplete(choice);
+        JsonNode content = choice.path("message").path("content");
+        if (!content.isTextual() || content.asText().isBlank()) {
+            throw missingContent();
         }
         return content.asText();
+    }
+
+    private static void requireNoError(JsonNode root) throws IOException {
+        JsonNode error = root.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            throw new IOException("LLM request failed: "
+                    + truncate(error.path("message").asText("Provider returned an error."), 600));
+        }
+    }
+
+    private static void requireComplete(JsonNode choice) throws CompletionLimitException {
+        String finishReason = choice.path("finish_reason").asText("");
+        if ("length".equals(finishReason) || "max_tokens".equals(finishReason)) {
+            throw new CompletionLimitException();
+        }
+    }
+
+    private static IOException missingContent() {
+        // Reasoning is not an answer or an edit proposal. Do not expose it as diagnostics.
+        return new IOException("The LLM returned no answer content (it may have returned only "
+                + "reasoning). Increase max_tokens or use a non-reasoning model, then retry.");
+    }
+
+    private static LlmConfig retryConfig(LlmConfig config, int attempt) throws IOException {
+        int nextTokens = (int) Math.min(MAX_RETRY_TOKENS,
+                Math.max(MIN_RETRY_TOKENS, (long) config.maxTokens() * 2));
+        if (attempt >= MAX_LENGTH_RETRIES || nextTokens <= config.maxTokens()) {
+            throw new IOException("The LLM output was truncated after reaching max_tokens="
+                    + config.maxTokens() + ". Increase the output token limit or reduce the "
+                    + "requested change, then retry. Incomplete output was not accepted.");
+        }
+        return new LlmConfig(config.baseUrl(), config.apiKey(), config.model(),
+                config.temperature(), nextTokens);
+    }
+
+    private <T> HttpResponse<T> send(
+            HttpRequest request,
+            HttpResponse.BodyHandler<T> handler,
+            CancellationToken token) throws IOException {
+        token.throwIfCancelled();
+        CompletableFuture<HttpResponse<T>> future = httpClient.sendAsync(request, handler);
+        token.onCancel(() -> future.cancel(true));
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IOException("Generation cancelled", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof CancellationException cancellation) {
+                throw cancellation;
+            }
+            throw new IOException("LLM request failed", cause);
+        }
+    }
+
+    private static final class CompletionLimitException extends IOException {
     }
 
     private HttpRequest buildRequest(

@@ -24,6 +24,8 @@ public final class IntentPromptBuilder {
         String system = """
                 You are the semantic intent router for Jentor, an IntelliJ IDEA course assistant.
                 Decide what the latest USER QUESTION asks Jentor to do. Return JSON only.
+                Classify the request only; do not solve it, analyze implementation details,
+                or design code changes. Code context is provided only to identify targets.
 
                 Allowed intents:
                 - CHAT: explain, discuss, answer a question, or review code without changing it.
@@ -36,6 +38,8 @@ public final class IntentPromptBuilder {
                 - A question containing a word such as "change" or "修改" is not automatically EDIT.
                 - "What changed?" and "修改了哪些？" are STATUS.
                 - A request to apply the previous analysis is EDIT with usePreviousAnalysis=true.
+                - Requests to simplify code, reduce duplication, or refactor are EDIT,
+                  including "帮我减少代码的冗余程度". Questions asking how to do so are CHAT.
                 - Only EDIT means code may be modified later.
                 - For EDIT, put the actionable instruction in "instruction".
                 - Use workspace file/type/member names from context as targetHints.

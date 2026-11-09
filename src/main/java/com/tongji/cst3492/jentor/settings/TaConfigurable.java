@@ -110,7 +110,7 @@ public final class TaConfigurable implements Configurable {
         state.coverageThreshold = parseDouble(coverageThreshold, "Coverage threshold", 0.0, 1.0);
         state.maxContextChars = parseInt(maxContextChars, "Max context chars", 1000, 20000);
         state.temperature = parseDouble(temperature, "Temperature", 0.0, 2.0);
-        state.maxTokens = parseInt(maxTokens, "Max output tokens", 128, 8000);
+        state.maxTokens = parseInt(maxTokens, "Max output tokens", 128, 32_768);
         state.language = language.getSelectedIndex() == 0 ? "zh" : "en";
         state.useMockModel = useMockModel.isSelected();
         state.streamOutput = streamOutput.isSelected();

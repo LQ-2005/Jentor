@@ -31,6 +31,8 @@ public final class EditPlanPromptBuilder {
                 You plan a code change for Jentor. Do not write code. Return JSON only.
                 Select the smallest correct set of existing workspace source files.
                 The plan may contain one or several files, but only files that need changes.
+                Keep instructions concise: name the target and requested change without
+                developing the implementation. A separate step will generate each file.
 
                 Return:
                 {

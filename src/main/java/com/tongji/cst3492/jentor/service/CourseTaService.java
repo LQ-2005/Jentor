@@ -346,7 +346,7 @@ public final class CourseTaService {
                 apiKey,
                 state.chatModel,
                 0.0,
-                Math.max(128, Math.min(600, state.maxTokens)));
+                state.maxTokens).forStructuredTask();
         List<ChatMessage> messages = new IntentPromptBuilder().build(
                 question,
                 history,
@@ -424,10 +424,10 @@ public final class CourseTaService {
         LlmConfig editConfig = mock
                 ? new LlmConfig("mock", "mock", "mock", 0.0, 256)
                 : new LlmConfig(state.baseUrl, apiKey, state.chatModel,
-                state.temperature, state.maxTokens);
+                state.temperature, state.maxTokens).forCodeEdit();
         LlmConfig planConfig = mock ? editConfig : new LlmConfig(
                 state.baseUrl, apiKey, state.chatModel, 0.0,
-                Math.max(256, Math.min(1_000, state.maxTokens)));
+                state.maxTokens).forStructuredTask();
         CompletableFuture<EditBatchResult> result = new CompletableFuture<>();
         CancellationToken token = new CancellationToken();
         Future<?> task = AppExecutorUtil.getAppExecutorService().submit(() -> {
