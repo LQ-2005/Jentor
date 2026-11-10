@@ -11,7 +11,9 @@
 工程已经包含：
 
 - Gradle wrapper；
-- `lib/` 下的 Jackson 和 CommonMark 依赖；
+- `lib/` 下的离线运行依赖（30 个 jar）：Jackson、CommonMark、Apache POI +
+  XMLBeans、PDFBox、Tess4J/Tesseract、JSoup 以及配套的 commons 与日志依赖，
+  详见 `lib/README.md`；
 - 预生成的课程索引 `src/main/resources/index/course-index.json`；
 - 构建脚本 `build-plugin.ps1`。
 

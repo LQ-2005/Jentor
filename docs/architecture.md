@@ -207,9 +207,11 @@ and `ChatPanel` keeps them next to the selected code. The rules live in
 - Names that usually hold credentials (`.env`, `secret*`, `credential*`,
   `*.pem`, `*.key`, `*.p12`, `*.jks`, `id_rsa*`) are refused, and admitted text
   is scanned for obvious private keys or API-token assignments.
-- Up to five files, 400 lines or 4000 characters per file, a 10000-character
-  budget for the file section, and a 16000-character global IDE-context budget.
-  Truncation keeps whole lines and records the range that survived.
+- Up to five files, 400 lines or 4000 characters per file, and a 10000-character
+  budget for the attached-file section. `PromptBuilder.MAX_IDE_CONTEXT_CHARS`
+  caps selection, snapshot and outline together at 72000 characters, in that
+  priority order. Truncation keeps whole lines and records the range that
+  survived.
 
 `WorkspaceFileReader` is the only part that touches the platform.
 `AttachFileAction` runs it inside a `ReadAction` on a pooled thread, so the EDT
@@ -390,9 +392,10 @@ history.
   selected code and opens the tool window.
 - `SelectionContextFactory` captures the selected text, up to 20 lines before
   and after it, the 1-based line range, and the nearest Java method/class
-  signature. `PromptBuilder` labels the selected and surrounding sections and
-  caps the whole IDE context at 6000 characters. The context remains attached
-  until the user selects another snippet or clicks Clear.
+  signature. `PromptBuilder` labels the selected and surrounding sections; the
+  selection shares the 72000-character IDE-context budget with the workspace
+  sections and is inserted first. The context remains attached until the user
+  selects another snippet or clicks Clear.
 - `TaSettings` stores the endpoint and model in XML and the API key in
   `PasswordSafe`.
 - `CourseLibraryService`, `CourseDocumentSource`, `CourseDocumentParser`,
@@ -412,8 +415,9 @@ history.
 - Retrieval is O(chunks * dimensions) with no network call.
 - The bundled fallback index is about 667 KiB. POI, PDFBox and Windows
   Tess4J/Tesseract increase the plugin ZIP substantially.
-- The global IDE context is capped at 16000 characters and course excerpts use
-  the configurable context limit.
+- The IDE context is capped at 72000 characters for selection, snapshot and
+  outline together, with 48000 per automatic file and 64000 for the snapshot.
+  Course excerpts use the configurable context limit.
 - The API key is never written to project files or logs.
 
 ## Known limitations
