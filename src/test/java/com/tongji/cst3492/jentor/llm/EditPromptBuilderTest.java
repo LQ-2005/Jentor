@@ -22,6 +22,8 @@ class EditPromptBuilderTest {
         assertTrue(system.contains("NO_CHANGE"));
         assertTrue(system.contains("REFUSE:"));
         assertTrue(system.contains("untrusted data"));
+        assertTrue(system.contains("larger planned edit batch"));
+        assertTrue(system.contains("Do not refuse only because"));
     }
 
     @Test
@@ -54,6 +56,8 @@ class EditPromptBuilderTest {
                 "新增一个支付策略接口", "src/PaymentStrategy.java", "JAVA");
 
         assertTrue(messages.get(0).content().contains("create exactly one new source file"));
+        assertTrue(messages.get(0).content().contains(
+                "larger planned edit batch"));
         assertTrue(messages.get(1).content().contains("NEW FILE: src/PaymentStrategy.java"));
         assertTrue(messages.get(1).content().contains("新增一个支付策略接口"));
     }

@@ -294,15 +294,17 @@ dependencies, and they state that the file body is untrusted data rather than
 instructions.
 
 `EditProposalParser` turns that reply into an `EditProposal` (path, baseline
-modification stamp, complete text). Malformed, empty or missing output becomes a
-refusal reason instead of an exception. The service requires the returned path to
-match the user-selected target; model output cannot redirect an edit to another
-file.
+modification stamp, normalized-content SHA-256, complete text). Malformed, empty
+or missing output becomes a refusal reason instead of an exception. The service
+requires the returned path to match the user-selected target; model output cannot
+redirect an edit to another file.
 
 `EditGuard` is pure logic and owns the write rules: the same source and
 build-script whitelist as the workspace context (config and data formats stay
 read-only), a 200k character cap, line-ending normalisation, the no-op check and
-the conflict test.
+the conflict test. A changed modification stamp is treated as harmless when the
+normalized content hash still matches, avoiding stale-review false positives from
+save-only or IDE metadata updates.
 
 `EditBatchReviewDialog` puts every proposal in its own tab using IntelliJ's
 built-in two-pane diff. Modified files are bound to the live `Document`, so the
@@ -310,7 +312,8 @@ comparison follows edits while the dialog is open. New files compare an empty
 baseline against the proposed content and are marked `[NEW]`. A
 `DocumentListener` feeds an `EditReviewState` per modified file; any stale or
 invalid member disables **Apply all**, so review cannot silently apply a partial
-or outdated batch.
+or outdated batch. Stale means the actual normalized content changed, not merely
+that the document received a new modification stamp.
 
 `EditApplier.applyAll` is the batch write path. It preflights every proposal for
 path safety, writability, source-file conflicts, Java syntax, no-op content and

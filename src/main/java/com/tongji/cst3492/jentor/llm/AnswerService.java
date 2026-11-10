@@ -17,6 +17,12 @@ import java.util.regex.Pattern;
 import java.util.function.Consumer;
 
 public final class AnswerService {
+    private static final Pattern CODE_SYMBOL_PATTERN = Pattern.compile(
+            "@[A-Za-z_][A-Za-z0-9_]*|\\b[A-Z][A-Za-z0-9_]{2,}\\b|\\b[a-z][A-Za-z0-9_]*\\s*\\(");
+    private static final Set<String> NON_SYMBOL_WORDS = Set.of(
+            "if", "for", "while", "switch", "catch", "return", "new",
+            "this", "super", "null", "true", "false");
+
     /**
      * Shown when workspace files were attached. The plugin never re-reads a file,
      * so the answer must say the snapshot may have drifted from the current file.
@@ -344,13 +350,10 @@ public final class AnswerService {
         }
 
         Set<String> symbols = new LinkedHashSet<>();
-        Matcher matcher = Pattern.compile(
-                "@[A-Za-z_][A-Za-z0-9_]*|\\b[A-Z][A-Za-z0-9_]{2,}\\b|\\b[a-z][A-Za-z0-9_]*\\s*\\(")
-                .matcher(codeContext.selected());
+        Matcher matcher = CODE_SYMBOL_PATTERN.matcher(codeContext.selected());
         while (matcher.find() && symbols.size() < 12) {
             String symbol = matcher.group().replace("(", "").trim();
-            if (!Set.of("if", "for", "while", "switch", "catch", "return", "new",
-                    "this", "super", "null", "true", "false").contains(symbol)) {
+            if (!NON_SYMBOL_WORDS.contains(symbol)) {
                 symbols.add(symbol);
             }
         }

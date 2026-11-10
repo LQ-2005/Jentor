@@ -63,6 +63,8 @@ This is the F0 baseline required for every group.
   bottom-left and a borderless `Mock / DeepSeek` selector plus an icon-only
   single-arrow send/stop control at bottom-right. The mode selector shows only
   text and a chevron until hovered, then gains a rounded hover background. The
+  composer footer shortens the workspace and model labels before they can overlap
+  the send control in a narrow tool window. The
   answer language follows the selector. English mode uses the original fallback
   sentence; Chinese mode uses the equivalent Chinese sentence.
 - Persistent, project-local conversations: completed question/answer turns are
@@ -71,6 +73,10 @@ This is the F0 baseline required for every group.
   shows title-only rows at a larger font, with a rounded hover background. It
   supports search, open, rename and delete. The most recent turns are still sent
   to the LLM for multi-turn follow-ups.
+- Code-edit outcomes are stored through the same conversation pipeline, including
+  applied, cancelled and unchanged results. The original user request is captured
+  before semantic routing, and reopening the conversation restores the latest edit
+  status used by STATUS questions.
 - Generation can be stopped. The request carries a cancellation token; the task
   and, where supported, the HTTP request are cancelled. Stale responses cannot
   update the UI or conversation memory.
@@ -80,6 +86,10 @@ This is the F0 baseline required for every group.
   citation repair and the disclosure sentence can rewrite it. Streaming can be
   disabled in the settings, and the offline mock model streams through the same
   path, so the UI behaviour can be checked without a key.
+- Stage-specific output budgets give route and edit-plan JSON enough room when a
+  reasoning model counts hidden reasoning against `max_tokens`. A response ending
+  in `length` or `max_tokens` is regenerated from the original messages with a
+  larger bounded budget; incomplete code is discarded after two failed retries.
 - Answers render as Markdown with CommonMark, including GFM tables, ordered and
   nested lists, blockquotes and inline formatting. Raw HTML is escaped, unsafe
   link schemes are stripped and images are replaced by their alt text, so model
@@ -135,8 +145,9 @@ This is the F0 baseline required for every group.
   checkbox is not required. A follow-up such as "修吧" or "按这个改" can adopt
   code issues identified in the previous answer. Every proposal still opens in
   IntelliJ's built-in side-by-side
-  diff; applying is one undoable command, stale suggestions are disabled, and
-  read-only or syntactically invalid Java files cannot be written.
+  diff; applying is one undoable command, suggestions are disabled only when the
+  normalized source content actually changed, and read-only or syntactically
+  invalid Java files cannot be written.
 - Multi-file edits are planned with the same request-time source snapshot
   contract as analysis. The planner sees complete small files and method-aware excerpts for
   large files rather than only the first 8000 characters. It selects only the
@@ -144,7 +155,8 @@ This is the F0 baseline required for every group.
   file-specific instructions. Jentor validates every proposal and
   shows one review window with a native two-pane diff tab per file.
   **Apply all** preflights the whole batch and writes it as one undoable command;
-  one stale or invalid file prevents partial writes.
+  one truly stale or invalid file prevents partial writes; harmless stamp-only
+  saves no longer trigger a false stale error.
 - When an edit adopts the previous analysis, Jentor carries the file set from
   that analysis into a fresh edit snapshot. Complete files are compared with the
   analyzed version; changed files are marked as source-changed in the planner
@@ -208,7 +220,7 @@ required.
 Build output:
 
 ```text
-build\distributions\jentor-2.1.1.zip
+build\distributions\jentor-2.1.5.zip
 ```
 
 Install it into IntelliJ:
@@ -413,11 +425,15 @@ the code:
 
 ## Demo script
 
-1. Open the tool window and point out the index summary.
-2. Ask `What is a checked exception?` and show the document/page citation.
-3. Ask `What is the weather in Shanghai today?` and show the exact fallback
-   sentence.
-4. Select a method, right-click, choose **Ask Jentor about Selection**, and
-   ask a question about the selected code.
-5. Open **Settings** and show that the API key is not stored in the project.
-6. Explain the retrieval pipeline and the 10/10 Hit@3 result.
+Use `Jentor-Demo-Questions.txt` as the single on-stage prompt document. The
+complete flow covers course Q&A, a general-knowledge question, selected-code
+context, workspace files, non-overlapping code edits, and adoption of an AI
+recommendation. Open `demo-workspaces/jentor-collaboration-demo` as the
+workspace for the code-editing stages.
+
+The offline retrieval harness reports 10/10 Hit@3 on the bundled evaluation
+questions. Run it with:
+
+```powershell
+.\gradlew.bat runRetrievalHarness
+```

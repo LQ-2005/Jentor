@@ -3,12 +3,11 @@ package com.tongji.cst3492.jentor.conversation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.project.Project;
+import com.tongji.cst3492.jentor.util.AtomicFileWriter;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -77,7 +76,7 @@ public final class ConversationStore {
     public synchronized void save(Conversation conversation) throws IOException {
         requireSafeId(conversation.id());
         Files.createDirectories(directory);
-        writeAtomically(conversationFile(conversation.id()),
+        AtomicFileWriter.write(conversationFile(conversation.id()),
                 MAPPER.writeValueAsBytes(conversation));
 
         List<ConversationSummary> updated = new ArrayList<>();
@@ -169,7 +168,7 @@ public final class ConversationStore {
         ConversationIndex rebuilt = new ConversationIndex(1, active, summaries);
         try {
             Files.createDirectories(directory);
-            writeAtomically(directory.resolve(INDEX_FILE), MAPPER.writeValueAsBytes(rebuilt));
+            AtomicFileWriter.write(directory.resolve(INDEX_FILE), MAPPER.writeValueAsBytes(rebuilt));
         } catch (IOException error) {
             LOG.log(java.util.logging.Level.WARNING,
                     "Cannot persist rebuilt Jentor conversation index", error);
@@ -179,7 +178,7 @@ public final class ConversationStore {
 
     private void writeIndex(ConversationIndex updated) throws IOException {
         Files.createDirectories(directory);
-        writeAtomically(directory.resolve(INDEX_FILE), MAPPER.writeValueAsBytes(updated));
+        AtomicFileWriter.write(directory.resolve(INDEX_FILE), MAPPER.writeValueAsBytes(updated));
         index = updated;
     }
 
@@ -193,14 +192,4 @@ public final class ConversationStore {
         }
     }
 
-    private static void writeAtomically(Path target, byte[] content) throws IOException {
-        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
-        Files.write(temporary, content);
-        try {
-            Files.move(temporary, target,
-                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException ignored) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
 }

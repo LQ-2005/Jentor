@@ -41,10 +41,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.Comparator;
 
 /** Routes supported course files to text, table, slide/sheet and OCR parsers. */
 public final class CourseDocumentParser {
@@ -136,7 +136,7 @@ public final class CourseDocumentParser {
                 }
             }
         }
-        return parsed(path, documentId, "SECTION", section, chunks, tables, images, ocr,
+        return parsed(path, documentId, section, chunks, tables, images, ocr,
                 "Apache POI DOCX");
     }
 
@@ -179,7 +179,7 @@ public final class CourseDocumentParser {
                         text.toString());
             }
         }
-        return parsed(path, documentId, "SLIDE", chunks.size(), chunks, tables, images, ocr,
+        return parsed(path, documentId, chunks.size(), chunks, tables, images, ocr,
                 "Apache POI PPTX");
     }
 
@@ -219,7 +219,7 @@ public final class CourseDocumentParser {
                 }
             }
         }
-        return parsed(path, documentId, "SHEET", chunks.size(), chunks, tables, images, ocr,
+        return parsed(path, documentId, chunks.size(), chunks, tables, images, ocr,
                 "Apache POI XLSX");
     }
 
@@ -261,7 +261,7 @@ public final class CourseDocumentParser {
                             sheet.getSheetName(), text);
                 }
             }
-            return parsed(path, documentId, "SHEET", chunks.size(), chunks, tables, 0, false,
+            return parsed(path, documentId, chunks.size(), chunks, tables, 0, false,
                     "Apache POI XLS");
         }
     }
@@ -283,7 +283,7 @@ public final class CourseDocumentParser {
                     firstLine(text), text));
         }
         int tables = html.select("table").size();
-        return parsed(path, documentId, "SECTION", section, chunks, tables,
+        return parsed(path, documentId, section, chunks, tables,
                 html.select("img").size(), false, "JSoup HTML");
     }
 
@@ -295,7 +295,7 @@ public final class CourseDocumentParser {
         List<PdfCourseIndexBuilder.RawChunk> chunks = new ArrayList<>();
         addSplitChunks(chunks, documentId, path, "SECTION", 1,
                 path.getFileName().toString(), normalized);
-        return parsed(path, documentId, "SECTION", 1, chunks, 1, 0, false,
+        return parsed(path, documentId, 1, chunks, 1, 0, false,
                 "UTF-8 CSV");
     }
 
@@ -343,13 +343,12 @@ public final class CourseDocumentParser {
             addSplitChunks(chunks, documentId, path, "SECTION", section,
                     firstLine(text), text);
         }
-        return parsed(path, documentId, "SECTION", section, chunks, 0, 0, false, parser);
+        return parsed(path, documentId, section, chunks, 0, 0, false, parser);
     }
 
     private static PdfCourseIndexBuilder.ParsedDocument parsed(
             Path path,
             String documentId,
-            String ignoredLocatorType,
             int locations,
             List<PdfCourseIndexBuilder.RawChunk> chunks,
             int tables,
@@ -451,7 +450,7 @@ public final class CourseDocumentParser {
                 return "";
             }
             return OcrEngine.recognize(image);
-        } catch (Throwable error) {
+        } catch (Exception | LinkageError error) {
             return "";
         }
     }

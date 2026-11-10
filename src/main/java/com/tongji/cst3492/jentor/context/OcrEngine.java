@@ -30,7 +30,7 @@ public final class OcrEngine {
             tesseract.setLanguage("chi_sim+eng");
             tesseract.setVariable("user_defined_dpi", "300");
             return tesseract.doOCR(image).strip();
-        } catch (Throwable error) {
+        } catch (Exception | LinkageError error) {
             throw new IOException("Offline OCR failed: " + error.getMessage(), error);
         }
     }

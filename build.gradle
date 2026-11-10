@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.tongji.cst3492.jentor'
-version = '2.1.1'
+version = '2.1.5'
 
 // The compiler toolchain must be able to read the IntelliJ jars it compiles
 // against. IntelliJ 2025.2-2026.1 ship Java 21 class files, 2026.2 ships Java 25
@@ -59,6 +59,8 @@ java {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 21
+    options.compilerArgs.addAll(['-Xlint:deprecation', '-Xlint:unchecked'])
 }
 
 tasks.named('test') {
@@ -69,6 +71,9 @@ tasks.register('compileRetrievalHarness', JavaCompile) {
     dependsOn tasks.named('classes')
     group = 'verification'
     description = 'Compiles the offline retrieval and citation harness.'
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
     source = files('tools/RetrievalHarness.java')
     classpath = sourceSets.main.runtimeClasspath
     destinationDirectory = layout.buildDirectory.dir('retrieval-harness')
@@ -80,6 +85,9 @@ tasks.register('runRetrievalHarness', JavaExec) {
     dependsOn tasks.named('compileRetrievalHarness')
     group = 'verification'
     description = 'Runs the offline retrieval and citation harness.'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
     classpath = files(
             layout.buildDirectory.dir('retrieval-harness'),
             sourceSets.main.output,
@@ -93,6 +101,9 @@ tasks.register('compilePdfIndexHarness', JavaCompile) {
     dependsOn tasks.named('classes')
     group = 'verification'
     description = 'Compiles the in-plugin PDF indexer CLI harness.'
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
     source = files('tools/PdfIndexHarness.java')
     classpath = sourceSets.main.runtimeClasspath
     destinationDirectory = layout.buildDirectory.dir('pdf-index-harness')
@@ -104,6 +115,9 @@ tasks.register('runPdfIndexHarness', JavaExec) {
     dependsOn tasks.named('compilePdfIndexHarness')
     group = 'verification'
     description = 'Runs the in-plugin PDF indexer; pass -Pmaterials=<directory>.'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
     classpath = files(
             layout.buildDirectory.dir('pdf-index-harness'),
             sourceSets.main.output,

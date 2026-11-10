@@ -1,0 +1,15 @@
+What is a checked exception?
+
+What is the capital of Australia?
+
+Explain the selected averageScore method, including whether it handles empty or null input safely. Do not modify any files.
+
+Using Student.java as read-only context, explain which values the record validates and which assumptions GradeService still makes.
+
+Explain how Student, GradeSummaryFormatter, GradeService, and GradeDemo work together in the jentor-demo-live workspace. Do not modify any code.
+
+In the current jentor-demo-live workspace, add countPassingStudents to GradeService. It must ignore null entries and return 0 when the list is null, empty, or contains only null entries. A student passes when the score is greater than or equal to passingScore. Update GradeDemo so the result is visible as "Passing students". Modify only GradeService.java and GradeDemo.java. Do not refactor.
+
+Analysis only for this turn. Based on the student results produced by the current GradeService, review GradeSummaryFormatter and recommend exactly one small, low-risk readability improvement. It must preserve the existing format method signature, require no new dependencies, and modify no files. Explain the benefit, tradeoff, and intended approach in prose only. Do not create an edit plan, show a diff, write code, or modify any file. I will decide whether to adopt it in my next message.
+
+I accept the single recommendation in your immediately preceding response. Re-read the current saved workspace before planning. Implement only that recommendation and modify only GradeSummaryFormatter.java. Do not modify GradeService.java, GradeDemo.java, or Student.java. Preserve the existing format(Student, int) signature and all current behavior for valid students. Do not add dependencies or unrelated cleanup. Explain how to verify the result.

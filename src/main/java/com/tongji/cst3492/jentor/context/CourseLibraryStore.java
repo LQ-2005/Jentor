@@ -4,13 +4,12 @@ import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.tongji.cst3492.jentor.model.CourseIndex;
 import com.tongji.cst3492.jentor.model.CourseLibraryCatalog;
+import com.tongji.cst3492.jentor.util.AtomicFileWriter;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
 /** Persistent cache for automatically managed course PDF libraries. */
 public final class CourseLibraryStore {
@@ -36,7 +35,7 @@ public final class CourseLibraryStore {
     public static void saveCatalog(CourseLibraryCatalog catalog) throws IOException {
         Path directory = directory();
         Files.createDirectories(directory);
-        writeAtomically(directory.resolve("catalog.json"),
+        AtomicFileWriter.write(directory.resolve("catalog.json"),
                 CourseLibraryCatalogCodec.toJsonBytes(catalog));
     }
 
@@ -56,7 +55,7 @@ public final class CourseLibraryStore {
     public static void saveIndex(CourseIndex index) throws IOException {
         Path directory = directory();
         Files.createDirectories(directory);
-        writeAtomically(directory.resolve("course-index.json"),
+        AtomicFileWriter.write(directory.resolve("course-index.json"),
                 CourseIndexJsonCodec.toJsonBytes(index));
     }
 
@@ -68,14 +67,4 @@ public final class CourseLibraryStore {
         return PathManager.getSystemDir().resolve(DIRECTORY);
     }
 
-    private static void writeAtomically(Path target, byte[] content) throws IOException {
-        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
-        Files.write(temporary, content);
-        try {
-            Files.move(temporary, target,
-                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException ignored) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
 }

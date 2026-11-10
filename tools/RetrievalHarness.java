@@ -111,7 +111,8 @@ public final class RetrievalHarness {
                         CodeContext.empty(), mockConfig, 5, 0.45, 6000, "en", List.of(),
                         new CancellationToken(), null);
         System.out.println("GENERAL grounded=" + general.grounded());
-        System.out.println("GENERAL fallback=" + general.text().startsWith(
-                com.tongji.cst3492.jentor.llm.PromptBuilder.FALLBACK_SENTENCE));
+        System.out.println("GENERAL fallbackNote="
+                + com.tongji.cst3492.jentor.llm.PromptBuilder.FALLBACK_SENTENCE
+                .equals(general.disclosure()));
     }
 }

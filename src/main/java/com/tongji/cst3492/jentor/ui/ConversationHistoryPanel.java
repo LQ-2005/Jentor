@@ -89,7 +89,9 @@ final class ConversationHistoryPanel extends JPanel {
 
             @Override
             public void mouseReleased(MouseEvent event) {
-                if (event.isPopupTrigger()) {
+                int index = indexAt(event.getPoint());
+                if (event.isPopupTrigger() && index >= 0) {
+                    list.setSelectedIndex(index);
                     showContextMenu(event);
                 }
             }

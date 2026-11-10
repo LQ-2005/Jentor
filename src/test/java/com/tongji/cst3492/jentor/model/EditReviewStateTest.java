@@ -25,6 +25,25 @@ class EditReviewStateTest {
     }
 
     @Test
+    void detectsAChangeThatHappenedBeforeTheReviewOpened() {
+        EditReviewState state = new EditReviewState(42L, 43L);
+
+        assertTrue(state.isStale());
+        assertFalse(state.onSourceChanged(44L), "the review is already stale");
+    }
+
+    @Test
+    void ignoresStampOnlyChangesWhileTheContentMatches() {
+        String hash = "content-hash";
+        EditReviewState state = new EditReviewState(42L, 43L, hash, hash);
+
+        assertFalse(state.isStale());
+        assertFalse(state.onSourceChanged(44L, hash));
+        assertTrue(state.onSourceChanged(45L, "different-content"));
+        assertTrue(state.isStale());
+    }
+
+    @Test
     void ignoresTheZeroBaseline() {
         EditReviewState state = new EditReviewState(0L);
 

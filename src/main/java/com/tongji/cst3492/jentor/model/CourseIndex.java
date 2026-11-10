@@ -9,11 +9,12 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 public final class CourseIndex {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final int version;
     private final String embeddingModel;
     private final int dimensions;
@@ -64,18 +65,18 @@ public final class CourseIndex {
         }
         return new CourseIndex(
                 version,
-                embeddingModel,
+                embeddingModel == null || embeddingModel.isBlank() ? "local" : embeddingModel,
                 dimensions,
                 chunkCount <= 0 ? chunks.size() : chunkCount,
                 defaultIdf,
-                new HashMap<>(idf),
+                idf == null ? Map.of() : new HashMap<>(idf),
                 documents,
                 chunks);
     }
 
     public static CourseIndex load(InputStream input) {
         try {
-            JsonNode root = new ObjectMapper().readTree(input);
+            JsonNode root = MAPPER.readTree(input);
             int version = root.path("version").asInt(1);
             String embeddingModel = root.path("embeddingModel").asText("local");
             int dimensions = root.path("dimensions").asInt(512);
@@ -83,9 +84,7 @@ public final class CourseIndex {
             float defaultIdf = (float) root.path("defaultIdf").asDouble(1.0);
 
             Map<String, Float> idf = new HashMap<>();
-            Iterator<Map.Entry<String, JsonNode>> idfFields = root.path("idf").fields();
-            while (idfFields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = idfFields.next();
+            for (Map.Entry<String, JsonNode> entry : root.path("idf").properties()) {
                 idf.put(entry.getKey(), (float) entry.getValue().asDouble());
             }
 

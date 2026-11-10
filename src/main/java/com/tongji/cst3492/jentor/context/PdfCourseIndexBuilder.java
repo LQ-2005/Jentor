@@ -248,7 +248,7 @@ public final class PdfCourseIndexBuilder {
                             combined.append("\n[OCR]\n").append(pageOcr);
                             ocrUsed = true;
                         }
-                    } catch (Throwable ignored) {
+                    } catch (Exception | LinkageError ignored) {
                         // Keep native text when OCR is unavailable or fails.
                     }
                 }
@@ -281,7 +281,7 @@ public final class PdfCourseIndexBuilder {
                 }
                 try {
                     result.add(OcrEngine.recognize(image.getImage()));
-                } catch (Throwable ignored) {
+                } catch (Exception | LinkageError ignored) {
                     result.add("");
                 }
             }

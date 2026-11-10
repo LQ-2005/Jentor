@@ -21,12 +21,14 @@ class EditProposalParserTest {
     @Test
     void parsesThePathAndTheCompleteFile() {
         EditProposalParser.Result result =
-                EditProposalParser.parse(ANSWER, 42L, "refactor to strategy");
+                EditProposalParser.parse(
+                        ANSWER, 42L, "refactor to strategy", "base-hash");
 
         assertTrue(result.hasProposal());
         EditProposal proposal = result.proposal();
         assertEquals("src/main/java/demo/A.java", proposal.path());
         assertEquals(42L, proposal.baseModificationStamp());
+        assertEquals("base-hash", proposal.baseContentHash());
         assertEquals("refactor to strategy", proposal.instruction());
         assertTrue(proposal.newText().startsWith("class A {"), proposal.newText());
         assertTrue(proposal.newText().endsWith("}"), proposal.newText());

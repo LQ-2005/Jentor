@@ -442,7 +442,9 @@ public final class CourseTaService {
                 }
                 String signal = question + "\n" + (previousAnalysis == null ? "" : previousAnalysis)
                         + "\n" + String.join(" ", targetHints == null ? List.of() : targetHints);
-                List<WorkspaceOutline> candidates = candidates(index, signal);
+                String preferredTarget = EditGuard.normalizeRelativePath(forcedTarget);
+                List<WorkspaceOutline> candidates =
+                        prioritizeTarget(index, candidates(index, signal), preferredTarget);
                 CodeContext sourceContext = WorkspaceContextBuilder.enrich(
                         project,
                         index,
@@ -464,11 +466,11 @@ public final class CourseTaService {
                             + "suggestion into this edit.";
                 }
                 EditPlan plan;
-                if (mock || forcedTarget != null && !forcedTarget.isBlank()) {
+                if (mock) {
                     String target = EditGuard.normalizeRelativePath(
-                            forcedTarget == null || forcedTarget.isBlank()
+                            preferredTarget.isBlank()
                                     ? EditTargetResolver.pick(index, activeFile, signal, "")
-                                    : forcedTarget);
+                                    : preferredTarget);
                     if (target.isBlank()) {
                         result.complete(new EditBatchResult(
                                 "", List.of(), List.of(),
@@ -486,14 +488,17 @@ public final class CourseTaService {
                             List.of(),
                             "");
                 } else {
+                    String planningActiveFile = activeFile == null || activeFile.isBlank()
+                            ? preferredTarget : activeFile;
                     List<ChatMessage> plannerMessages = new EditPlanPromptBuilder().build(
                             question,
                             effectivePreviousAnalysis,
-                            activeFile,
+                            planningActiveFile,
                             "",
                             candidates,
                             sourceContext.files(),
-                            language);
+                            language,
+                            preferredTarget);
                     String plannerReply = chatClient(false).complete(
                             planConfig, plannerMessages, token);
                     token.throwIfCancelled();
@@ -534,11 +539,9 @@ public final class CourseTaService {
                             skipped.putIfAbsent(path, "parent directory is unavailable or read-only");
                             continue;
                         }
-                        String instruction = question
-                                + "\n\nPrevious analysis:\n"
-                                + effectivePreviousAnalysis
-                                + "\n\nPlanned new file:\n"
-                                + planned.instruction();
+                        String instruction = scopedFileInstruction(
+                                question, effectivePreviousAnalysis,
+                                planned.instruction(), plan.files().size());
                         List<ChatMessage> editMessages = new EditPromptBuilder().buildNewFile(
                                 instruction,
                                 path,
@@ -583,7 +586,11 @@ public final class CourseTaService {
                         skipped.putIfAbsent(path, "not a text file");
                         continue;
                     }
-                    String text = ReadAction.computeBlocking(() -> WorkspaceFileReader.textOf(file));
+                    SourceSnapshot sourceSnapshot = ReadAction.computeBlocking(() -> {
+                        String value = WorkspaceFileReader.textOf(file);
+                        return new SourceSnapshot(value, document.getModificationStamp());
+                    });
+                    String text = sourceSnapshot.text();
                     if (text == null) {
                         skipped.putIfAbsent(path, "cannot read file");
                         continue;
@@ -592,11 +599,9 @@ public final class CourseTaService {
                         skipped.putIfAbsent(path, "file is too large to rewrite safely");
                         continue;
                     }
-                    String instruction = question
-                            + "\n\nPrevious analysis:\n"
-                            + effectivePreviousAnalysis
-                            + "\n\nPlanned changes for this file:\n"
-                            + planned.instruction();
+                    String instruction = scopedFileInstruction(
+                            question, effectivePreviousAnalysis,
+                            planned.instruction(), plan.files().size());
                     List<ChatMessage> editMessages = new EditPromptBuilder().build(
                             instruction,
                             path,
@@ -607,7 +612,10 @@ public final class CourseTaService {
                     String reply = chatClient(mock).complete(editConfig, editMessages, token);
                     token.throwIfCancelled();
                     EditProposalParser.Result parsed = EditProposalParser.parse(
-                            reply, document.getModificationStamp(), instruction);
+                            reply,
+                            sourceSnapshot.modificationStamp(),
+                            instruction,
+                            EditGuard.contentHash(text));
                     if (!parsed.hasProposal()) {
                         skipped.putIfAbsent(path,
                                 parsed.noChange()
@@ -664,6 +672,44 @@ public final class CourseTaService {
         var ranking = com.tongji.cst3492.jentor.context.WorkspaceOutlineSelector
                 .rank(index, signal, 40);
         return ranking.files();
+    }
+
+    private List<WorkspaceOutline> prioritizeTarget(
+            WorkspaceIndex index,
+            List<WorkspaceOutline> ranked,
+            String target) {
+        if (target == null || target.isBlank()) {
+            return ranked;
+        }
+        LinkedHashMap<String, WorkspaceOutline> ordered = new LinkedHashMap<>();
+        if (index != null) {
+            index.files().stream()
+                    .filter(file -> target.equals(file.path()))
+                    .findFirst()
+                    .ifPresent(file -> ordered.put(target, file));
+        }
+        for (WorkspaceOutline file : ranked) {
+            ordered.putIfAbsent(file.path(), file);
+        }
+        return List.copyOf(ordered.values());
+    }
+
+    private String scopedFileInstruction(
+            String question,
+            String previousAnalysis,
+            String plannedInstruction,
+            int batchFileCount) {
+        return "ORIGINAL USER REQUEST (context only):\n"
+                + question
+                + "\n\nRELEVANT PRIOR ANALYSIS (context only):\n"
+                + (previousAnalysis == null || previousAnalysis.isBlank()
+                        ? "(none)" : previousAnalysis)
+                + "\n\nAUTHORITATIVE CHANGES FOR THIS FILE:\n"
+                + plannedInstruction
+                + "\n\nThis response covers one file in a planned batch of "
+                + Math.max(1, batchFileCount)
+                + ". Apply only the changes assigned to this file. Other planned files "
+                + "are handled separately.";
     }
 
     private AnswerService getAnswerService(boolean mock) {
@@ -732,6 +778,9 @@ public final class CourseTaService {
         }
         service.ensureStarted();
         return service;
+    }
+
+    private record SourceSnapshot(String text, long modificationStamp) {
     }
 
 }

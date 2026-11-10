@@ -16,6 +16,7 @@ import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.util.ui.JBUI;
+import com.tongji.cst3492.jentor.context.EditGuard;
 import com.tongji.cst3492.jentor.context.WorkspaceFileReader;
 import com.tongji.cst3492.jentor.model.EditBatchResult;
 import com.tongji.cst3492.jentor.model.EditProposal;
@@ -41,7 +42,6 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
     private final JBLabel banner = new JBLabel();
     private final List<ReviewItem> items;
     private final List<String> invalidFiles = new ArrayList<>();
-    private final List<MonitorBinding> monitors = new ArrayList<>();
     private EditBatchApplyResult applyResult;
 
     public EditBatchReviewDialog(Project project, EditBatchResult batch) {
@@ -66,13 +66,13 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
                 @Override
                 public void documentChanged(@NotNull DocumentEvent event) {
                     if (item.state().onSourceChanged(
-                            item.document().getModificationStamp())) {
+                            item.document().getModificationStamp(),
+                            EditGuard.contentHash(item.document().getText()))) {
                         updateBanner();
                     }
                 }
             };
-            item.document().addDocumentListener(monitor);
-            monitors.add(new MonitorBinding(item.document(), monitor));
+            item.document().addDocumentListener(monitor, this);
         }
     }
 
@@ -140,12 +140,20 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
     }
 
     private void updateBanner() {
-        boolean stale = items.stream().anyMatch(item -> item.state().isStale());
+        List<String> stalePaths = items.stream()
+                .filter(item -> item.state().isStale())
+                .map(item -> item.proposal().path())
+                .toList();
+        boolean stale = !stalePaths.isEmpty();
         boolean invalid = !invalidFiles.isEmpty()
                 || items.stream().anyMatch(item -> !item.syntaxError().isBlank());
         banner.setForeground(stale || invalid ? JBColor.RED : JBColor.GRAY);
         if (stale) {
-            banner.setText(I18n.t(language(), "editBatchStale"));
+            banner.setText("<html>"
+                    + escape(I18n.t(language(), "editBatchStale"))
+                    + "<br/>"
+                    + escape(String.join(", ", stalePaths))
+                    + "</html>");
         } else if (invalid) {
             banner.setText(I18n.t(language(), "editBatchInvalid"));
         } else {
@@ -175,9 +183,6 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
 
     @Override
     public void dispose() {
-        for (MonitorBinding binding : monitors) {
-            binding.document().removeDocumentListener(binding.listener());
-        }
         super.dispose();
     }
 
@@ -202,9 +207,11 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
                     file,
                     document,
                     syntaxError,
-                    document == null
-                            ? new EditReviewState(0)
-                            : new EditReviewState(document.getModificationStamp())));
+                    new EditReviewState(
+                            proposal.baseModificationStamp(),
+                            document == null ? 0L : document.getModificationStamp(),
+                            proposal.baseContentHash(),
+                            document == null ? "" : EditGuard.contentHash(document.getText()))));
         }
         return List.copyOf(resolved);
     }
@@ -233,7 +240,4 @@ public final class EditBatchReviewDialog extends DialogWrapper implements Dispos
             EditReviewState state) {
     }
 
-    private record MonitorBinding(
-            Document document, DocumentListener listener) {
-    }
 }

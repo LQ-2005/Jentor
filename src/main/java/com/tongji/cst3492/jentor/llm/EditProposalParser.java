@@ -1,6 +1,7 @@
 package com.tongji.cst3492.jentor.llm;
 
 import com.tongji.cst3492.jentor.model.EditProposal;
+import com.tongji.cst3492.jentor.model.EditOperation;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,6 +30,14 @@ public final class EditProposalParser {
     }
 
     public static Result parse(String answer, long baseModificationStamp, String instruction) {
+        return parse(answer, baseModificationStamp, instruction, "");
+    }
+
+    public static Result parse(
+            String answer,
+            long baseModificationStamp,
+            String instruction,
+            String baseContentHash) {
         if (answer == null || answer.isBlank()) {
             return new Result(null, "the model returned no content", false);
         }
@@ -43,7 +52,15 @@ public final class EditProposalParser {
                 return new Result(null, "the proposed file is empty", false);
             }
             return new Result(
-                    new EditProposal(path, baseModificationStamp, content, instruction), null, false);
+                    new EditProposal(
+                            path,
+                            baseModificationStamp,
+                            content,
+                            instruction,
+                            EditOperation.MODIFY,
+                            baseContentHash),
+                    null,
+                    false);
         }
         if (NO_CHANGE.matcher(answer).find()) {
             return new Result(null, null, true);

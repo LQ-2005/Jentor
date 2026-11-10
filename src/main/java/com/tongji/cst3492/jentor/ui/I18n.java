@@ -33,8 +33,9 @@ public final class I18n {
             case "chars" -> zh ? " 字符" : " chars";
             case "pages" -> zh ? " 页" : " pages";
             case "sources" -> zh ? "来源：" : "Sources: ";
-            case "sourcesCount" -> zh ? "引用来源" : "Sources";
+            case "sourcesCount" -> zh ? "已引用来源" : "Cited sources";
             case "view" -> zh ? "查看" : "View";
+            case "cancelEdit" -> zh ? "取消修改" : "Cancel edit";
             case "remove" -> zh ? "移除" : "Remove";
             case "attachmentTitle" -> zh ? "代码附件" : "Code attachment";
             case "newReply" -> zh ? "有新回复" : "New reply";
@@ -67,6 +68,9 @@ public final class I18n {
             case "citationsValidated" -> zh
                     ? "文档与页码已校验"
                     : "Document and page validated";
+            case "citationsMixed" -> zh
+                    ? "引用部分已校验；部分补充内容基于通用知识"
+                    : "Cited sections validated; supplementary content uses general knowledge";
             case "citationsFailed" -> zh
                     ? "引用未通过校验"
                     : "Citation validation failed";
@@ -111,6 +115,7 @@ public final class I18n {
             case "editPrompt" -> zh
                     ? "可以直接描述希望如何修改当前代码。"
                     : "Describe how you want the current code changed.";
+            case "editPending" -> zh ? "待修改：" : "Edit pending: ";
             case "editNoTarget" -> zh
                     ? "我还不能确定要修改哪个文件。请打开目标文件，或告诉我类名或方法名。"
                     : "I cannot determine which file to change. Open the target or name the class or method.";

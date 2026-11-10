@@ -10,13 +10,24 @@ public record EditProposal(
         long baseModificationStamp,
         String newText,
         String instruction,
-        EditOperation operation) {
+        EditOperation operation,
+        String baseContentHash) {
 
     public EditProposal {
         path = path == null ? "" : path.replace('\\', '/').strip();
         newText = newText == null ? "" : newText;
         instruction = instruction == null ? "" : instruction;
         operation = operation == null ? EditOperation.MODIFY : operation;
+        baseContentHash = baseContentHash == null ? "" : baseContentHash.strip();
+    }
+
+    public EditProposal(
+            String path,
+            long baseModificationStamp,
+            String newText,
+            String instruction,
+            EditOperation operation) {
+        this(path, baseModificationStamp, newText, instruction, operation, "");
     }
 
     public EditProposal(

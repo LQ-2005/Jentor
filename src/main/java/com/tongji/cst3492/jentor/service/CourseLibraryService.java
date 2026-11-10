@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -52,7 +53,11 @@ public final class CourseLibraryService implements Disposable {
 
     private final Object lock = new Object();
     private final ExecutorService worker = Executors.newSingleThreadExecutor(
-            task -> new Thread(task, "Jentor course library"));
+            task -> {
+                Thread thread = new Thread(task, "Jentor course library");
+                thread.setDaemon(true);
+                return thread;
+            });
     private final AtomicInteger queuedOperations = new AtomicInteger();
     private final Alarm sweepAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, this);
     private final Alarm changeAlarm = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, this);
@@ -473,18 +478,24 @@ public final class CourseLibraryService implements Disposable {
 
     private void enqueue(Runnable operation) {
         queuedOperations.incrementAndGet();
-        worker.execute(() -> {
-            try {
-                operation.run();
-            } catch (Throwable error) {
-                LOG.warn("Jentor course library operation failed", error);
-                lastError = error.getMessage() == null
-                        ? error.getClass().getSimpleName()
-                        : error.getMessage();
-            } finally {
-                queuedOperations.decrementAndGet();
-            }
-        });
+        try {
+            worker.execute(() -> {
+                try {
+                    operation.run();
+                } catch (Throwable error) {
+                    LOG.warn("Jentor course library operation failed", error);
+                    lastError = error.getMessage() == null
+                            ? error.getClass().getSimpleName()
+                            : error.getMessage();
+                } finally {
+                    queuedOperations.decrementAndGet();
+                }
+            });
+        } catch (RejectedExecutionException error) {
+            queuedOperations.decrementAndGet();
+            lastError = "The course library service is not available.";
+            LOG.warn(lastError, error);
+        }
     }
 
     private void onChanges(List<? extends VFileEvent> events) {

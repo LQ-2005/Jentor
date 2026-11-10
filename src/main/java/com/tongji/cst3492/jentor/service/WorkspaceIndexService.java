@@ -233,16 +233,24 @@ public final class WorkspaceIndexService implements Disposable {
             return;
         }
         List<String> changed = new ArrayList<>(pendingChanges);
-        pendingChanges.clear();
         if (changed.isEmpty()) {
             stale = false;
             return;
         }
-        WorkspaceIndex updated = ReadAction.computeBlocking(
-                () -> WorkspaceIndexBuilder.refresh(project, local, changed));
-        index = updated;
-        stale = false;
-        WorkspaceIndexStore.save(project, updated);
+        try {
+            WorkspaceIndex updated = ReadAction.computeBlocking(
+                    () -> WorkspaceIndexBuilder.refresh(project, local, changed));
+            pendingChanges.removeAll(changed);
+            index = updated;
+            stale = !pendingChanges.isEmpty();
+            WorkspaceIndexStore.save(project, updated);
+            if (stale) {
+                scheduleRefresh();
+            }
+        } catch (RuntimeException error) {
+            stale = true;
+            LOG.warn("Cannot refresh the Jentor workspace index", error);
+        }
     }
 
     private void scheduleSweep(int delayMs) {
@@ -265,11 +273,17 @@ public final class WorkspaceIndexService implements Disposable {
         boolean fresh = ReadAction.computeBlocking(
                 () -> WorkspaceIndexBuilder.isFresh(project, local));
         if (!fresh) {
-            WorkspaceIndex rebuilt = ReadAction.computeBlocking(
-                    () -> WorkspaceIndexBuilder.build(project));
-            index = rebuilt;
-            stale = false;
-            WorkspaceIndexStore.save(project, rebuilt);
+            try {
+                WorkspaceIndex rebuilt = ReadAction.computeBlocking(
+                        () -> WorkspaceIndexBuilder.build(project));
+                pendingChanges.clear();
+                index = rebuilt;
+                stale = false;
+                WorkspaceIndexStore.save(project, rebuilt);
+            } catch (RuntimeException error) {
+                stale = true;
+                LOG.warn("Cannot rebuild the Jentor workspace index", error);
+            }
         }
     }
 

@@ -1,5 +1,9 @@
 package com.tongji.cst3492.jentor.context;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Locale;
 
 /**
@@ -41,6 +45,34 @@ public final class EditGuard {
     }
 
     /**
+     * A stamp change is harmless when the normalized content hash still matches.
+     * Proposals without a recorded hash retain the conservative stamp-only check.
+     */
+    public static boolean isConflict(
+            long baseModificationStamp,
+            long currentModificationStamp,
+            String baseContentHash,
+            String currentText) {
+        if (!isConflict(baseModificationStamp, currentModificationStamp)) {
+            return false;
+        }
+        return baseContentHash == null
+                || baseContentHash.isBlank()
+                || !baseContentHash.equals(contentHash(currentText));
+    }
+
+    /** Stable SHA-256 fingerprint of normalized file content. */
+    public static String contentHash(String text) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(
+                    digest.digest(normalize(text).getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is required", error);
+        }
+    }
+
+    /**
      * Normalizes a model/user supplied project-relative path and rejects paths
      * that are absolute, contain parent traversal, or otherwise cannot be bound
      * safely beneath the project root.
@@ -58,6 +90,9 @@ public final class EditGuard {
         }
         while (normalized.startsWith("./")) {
             normalized = normalized.substring(2);
+        }
+        if (normalized.endsWith("/")) {
+            return "";
         }
         String[] segments = normalized.split("/");
         for (String segment : segments) {

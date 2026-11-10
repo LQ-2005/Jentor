@@ -36,6 +36,7 @@ class AnswerServiceCitationTest {
 
         assertTrue(answer.grounded());
         assertEquals(CitationStatus.VALIDATED, answer.citationStatus());
+        assertFalse(answer.hasMixedEvidence());
         assertEquals(1, client.calls);
         assertEquals(1, answer.sources().size());
         assertTrue(answer.warnings().isEmpty());
@@ -85,6 +86,7 @@ class AnswerServiceCitationTest {
 
         assertEquals(CitationStatus.VALIDATED, answer.citationStatus());
         assertEquals(PromptBuilder.FALLBACK_SENTENCE, answer.disclosure());
+        assertTrue(answer.hasMixedEvidence());
         assertFalse(answer.text().contains(PromptBuilder.FALLBACK_SENTENCE));
         assertTrue(answer.text().contains("Python currently leads"));
     }

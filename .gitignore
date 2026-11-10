@@ -3,6 +3,12 @@
 build/
 out/
 work/
+.codex-build/
+.codex-finalizer/
+outputs/
+tmp/
+output/
+*.zip
 .idea/
 *.iml
 __pycache__/
@@ -14,3 +20,4 @@ hs_err_pid*
 replay_pid*
 .DS_Store
 Thumbs.db
+*- 副本/

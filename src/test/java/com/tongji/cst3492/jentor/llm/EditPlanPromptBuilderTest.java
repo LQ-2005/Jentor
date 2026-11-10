@@ -41,4 +41,39 @@ class EditPlanPromptBuilderTest {
         assertTrue(prompt.contains("LATEST USER REQUEST:"));
         assertTrue(messages.get(0).content().contains("CREATE"));
     }
+
+    @Test
+    void preferredTargetIsPrimaryButMayExpandToRelatedFiles() {
+        CodeFileSnapshot service = CodeFilePolicy.snapshot(
+                "src/main/java/demo/GradeService.java",
+                "JAVA",
+                "class GradeService { double average(int[] scores) { return 0; } }");
+        CodeFileSnapshot demo = CodeFilePolicy.snapshot(
+                "src/main/java/demo/GradeDemo.java",
+                "JAVA",
+                "class GradeDemo { public static void main(String[] args) { } }");
+        List<ChatMessage> messages = new EditPlanPromptBuilder().build(
+                "Add countPassingStudents and update GradeDemo to print it.",
+                "",
+                "src/main/java/demo/GradeService.java",
+                "",
+                List.of(
+                        new WorkspaceOutline(
+                                "src/main/java/demo/GradeService.java",
+                                "demo", "GradeService", 20, List.of("average(int[])")),
+                        new WorkspaceOutline(
+                                "src/main/java/demo/GradeDemo.java",
+                                "demo", "GradeDemo", 10, List.of("main(String[])"))),
+                List.of(service, demo),
+                "en",
+                "src/main/java/demo/GradeService.java");
+
+        assertTrue(messages.get(0).content().contains("PREFERRED TARGET"));
+        assertTrue(messages.get(0).content().contains(
+                "may still include other source"));
+        assertTrue(messages.get(1).content().contains(
+                "PREFERRED TARGET:\nsrc/main/java/demo/GradeService.java"));
+        assertTrue(messages.get(1).content().contains(
+                "src/main/java/demo/GradeDemo.java"));
+    }
 }

@@ -132,6 +132,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private final JPanel attachmentBar = new JPanel(new BorderLayout(6, 0));
     private final JBLabel attachmentLabel = new JBLabel();
     private final JButton viewAttachmentButton = new JButton();
+    private final JButton cancelEditButton = new JButton();
     private final JButton removeAttachmentButton = new JButton();
     private final Timer settingsTimer;
     private final Timer reflowTimer;
@@ -249,6 +250,8 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             return;
         }
         pendingCodeContext = context;
+        pendingEditTargetPath = null;
+        pendingCodeEditRequested = false;
         refreshAttachmentBar();
         updateLanguageUi();
         input.requestFocusInWindow();
@@ -403,8 +406,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         JPanel attachmentButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         attachmentButtons.setOpaque(false);
         configureButton(viewAttachmentButton, event -> viewAttachment());
+        configureButton(cancelEditButton, event -> cancelEditPreset());
         configureButton(removeAttachmentButton, event -> removeAttachment());
         attachmentButtons.add(viewAttachmentButton);
+        attachmentButtons.add(cancelEditButton);
         attachmentButtons.add(removeAttachmentButton);
         attachmentBar.add(attachmentLabel, BorderLayout.CENTER);
         attachmentBar.add(attachmentButtons, BorderLayout.EAST);
@@ -542,15 +547,32 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         CodeContext previousAnalysisContext = assistantAdvice == null
                 || assistantAdvice.isBlank()
                 ? CodeContext.empty() : lastAnalysisContext;
-        EditBatchRequest request = service.prepareEditBatch(
-                instruction,
-                assistantAdvice == null ? "" : assistantAdvice,
-                forcedTarget == null ? "" : forcedTarget,
-                targetHints == null ? List.of() : targetHints,
-                activeFile,
-                pendingContextSnapshot(),
-                previousAnalysisContext,
-                currentLanguage());
+        EditBatchRequest request;
+        try {
+            request = service.prepareEditBatch(
+                    instruction,
+                    assistantAdvice == null ? "" : assistantAdvice,
+                    forcedTarget == null ? "" : forcedTarget,
+                    targetHints == null ? List.of() : targetHints,
+                    activeFile,
+                    pendingContextSnapshot(),
+                    previousAnalysisContext,
+                    currentLanguage());
+        } catch (RuntimeException error) {
+            busy = false;
+            setProgressText("");
+            updateSendButton();
+            appendError(
+                    friendlyError(error),
+                    currentLanguage(),
+                    () -> sendEdit(
+                            turn,
+                            instruction,
+                            forcedTarget == null ? "" : forcedTarget,
+                            assistantAdvice == null ? "" : assistantAdvice,
+                            targetHints == null ? List.of() : targetHints));
+            return;
+        }
         currentEditRequest = request;
         request.future().whenComplete((result, error) ->
                 ApplicationManager.getApplication().invokeLater(() -> {
@@ -564,7 +586,15 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         busy = false;
                         setProgressText("");
                         updateSendButton();
-                        appendError(friendlyError(error), currentLanguage(), turn.question());
+                        appendError(
+                                friendlyError(error),
+                                currentLanguage(),
+                                () -> sendEdit(
+                                        turn,
+                                        instruction,
+                                        forcedTarget == null ? "" : forcedTarget,
+                                        assistantAdvice == null ? "" : assistantAdvice,
+                                        targetHints == null ? List.of() : targetHints));
                         return;
                     }
                     if (result.hasProposals()) {
@@ -617,7 +647,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             String path = VfsUtilCore.getRelativePath(
                     file, ProjectUtil.guessProjectDir(project), '/');
             if (path != null && !path.isBlank()) {
-                return new EditorTarget(path, file.getName());
+                return new EditorTarget(path);
             }
         }
         return null;
@@ -675,14 +705,26 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         List<String> workspaceFiles = index == null
                 ? List.of()
                 : index.files().stream().map(file -> file.path()).limit(80).toList();
-        IntentRequest request = service.routeIntent(
-                question,
-                routingHistory(),
-                lastEditStatus,
-                activePath,
-                activeSnippet,
-                workspaceFiles,
-                currentLanguage());
+        IntentRequest request;
+        try {
+            request = service.routeIntent(
+                    question,
+                    routingHistory(),
+                    lastEditStatus,
+                    activePath,
+                    activeSnippet,
+                    workspaceFiles,
+                    currentLanguage());
+        } catch (RuntimeException error) {
+            busy = false;
+            setProgressText("");
+            updateSendButton();
+            appendError(
+                    friendlyError(error),
+                    currentLanguage(),
+                    () -> startIntentRouting(turn));
+            return;
+        }
         currentIntentRequest = request;
         request.future().whenComplete((decision, error) ->
                 ApplicationManager.getApplication().invokeLater(() -> {
@@ -696,7 +738,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         busy = false;
                         setProgressText("");
                         updateSendButton();
-                        appendError(friendlyError(error), currentLanguage(), question);
+                        appendError(
+                                friendlyError(error),
+                                currentLanguage(),
+                                () -> startIntentRouting(turn));
                         return;
                     }
                     handleIntent(turn, decision);
@@ -801,7 +846,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             input.setText(question);
             setProgressText("");
             updateSendButton();
-            appendError(friendlyError(error), currentLanguage(), question);
+            appendError(
+                    friendlyError(error),
+                    currentLanguage(),
+                    () -> retryChat(turn, includeWorkspace, analyze));
             return;
         }
         currentRequest = request;
@@ -834,7 +882,10 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
                         discardStreamCard();
                         input.setText(question);
                         lastAssistantTextForIntent = "";
-                        appendError(friendlyError(error), currentLanguage(), question);
+                        appendError(
+                                friendlyError(error),
+                                currentLanguage(),
+                                () -> retryChat(turn, includeWorkspace, analyze));
                     }
                     updateSendButton();
                     input.requestFocusInWindow();
@@ -857,6 +908,15 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         busy = false;
         setProgressText(I18n.t(currentLanguage(), "stopped"));
         updateSendButton();
+    }
+
+    private void retryChat(
+            ConversationTurn turn, boolean includeWorkspace, boolean analyze) {
+        String question = turn.question();
+        if (question.equals(input.getText().trim())) {
+            input.setText("");
+        }
+        submitChat(turn, includeWorkspace, analyze);
     }
 
     private void updateSendButton() {
@@ -902,11 +962,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
 
     private void populateAnswerDetails(JPanel card, Answer answer) {
         int width = bodyWidth();
+        boolean mixedEvidence = answer.hasMixedEvidence();
         JPanel meta = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         meta.setOpaque(false);
         meta.setAlignmentX(LEFT_ALIGNMENT);
         if (answer.citationStatus() != CitationStatus.NOT_APPLICABLE) {
-            JBLabel status = new JBLabel(citationStatusText(answer.citationStatus()));
+            JBLabel status = new JBLabel(mixedEvidence
+                    ? I18n.t(currentLanguage(), "citationsMixed")
+                    : citationStatusText(answer.citationStatus()));
             status.setFont(status.getFont().deriveFont(11f));
             status.setForeground(answer.citationStatus() == CitationStatus.FAILED
                     ? JBColor.RED
@@ -943,7 +1006,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
             card.add(meta);
         }
         card.add(sourcesPanel);
-        if (!answer.disclosure().isBlank()) {
+        if (!answer.disclosure().isBlank() && !mixedEvidence) {
             card.add(createFootnote(answer.disclosure(), width));
         }
         if (!answer.contextNote().isBlank()) {
@@ -1108,12 +1171,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         return new MessageView(roleLabel, body);
     }
 
-    private void appendError(String message, String language, String question) {
-        boolean settings = message.toLowerCase(Locale.ROOT).contains("api key")
-                || message.contains("密钥");
-        boolean index = message.startsWith("Index error:")
+    private void appendError(String message, String language, Runnable retryAction) {
+        String normalized = message.toLowerCase(Locale.ROOT);
+        boolean settings = normalized.contains("api key")
+                || normalized.contains("base url")
+                || normalized.contains("chat model")
+                || message.contains("密钥")
+                || message.contains("接口地址")
+                || message.contains("模型未配置");
+        boolean index = normalized.startsWith("index error:")
                 || message.startsWith("索引错误：")
-                || message.contains("course index")
+                || normalized.contains("course index")
                 || message.contains("课程索引");
         String actionLabel = settings ? I18n.t(language, "openSettings")
                 : index ? I18n.t(language, "importIndexAction")
@@ -1124,10 +1192,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         } else if (index) {
             action = this::showCourseLibrary;
         } else {
-            action = () -> {
-                input.setText(question);
-                send();
-            };
+            action = retryAction;
         }
 
         JPanel row = new ContentSizedPanel(new BorderLayout());
@@ -1250,7 +1315,17 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private String attachmentSummary() {
         String language = currentLanguage();
         StringBuilder label = new StringBuilder();
+        if (pendingCodeEditRequested) {
+            String target = fileName(pendingEditTargetPath);
+            label.append(I18n.t(language, "editPending"));
+            if (!target.isBlank()) {
+                label.append(target);
+            }
+        }
         if (pendingCodeContext != null && pendingCodeContext.hasSelection()) {
+            if (label.length() > 0) {
+                label.append("  |  ");
+            }
             label.append(pendingCodeContext.summary());
         }
         if (!pendingFiles.isEmpty()) {
@@ -1270,10 +1345,14 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void refreshAttachmentBar() {
         String summary = attachmentSummary();
         boolean visible = !summary.isEmpty();
+        boolean hasAttachment = !pendingContextSnapshot().isEmpty();
         attachmentBar.setVisible(visible);
         if (visible) {
             attachmentLabel.setText(summary);
         }
+        viewAttachmentButton.setVisible(hasAttachment);
+        removeAttachmentButton.setVisible(hasAttachment);
+        cancelEditButton.setVisible(pendingCodeEditRequested);
         attachmentBar.revalidate();
         attachmentBar.repaint();
     }
@@ -1292,7 +1371,24 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private void removeAttachment() {
         pendingCodeContext = null;
         pendingFiles.clear();
-        attachmentBar.setVisible(false);
+        pendingEditTargetPath = null;
+        pendingCodeEditRequested = false;
+        if (!busy) {
+            setProgressText("");
+        }
+        refreshAttachmentBar();
+        updateSendButton();
+    }
+
+    private void cancelEditPreset() {
+        pendingEditTargetPath = null;
+        pendingCodeEditRequested = false;
+        if (!busy) {
+            setProgressText("");
+        }
+        refreshAttachmentBar();
+        updateSendButton();
+        input.requestFocusInWindow();
     }
 
     private void startNewConversation() {
@@ -1700,6 +1796,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
         workspaceBox.setText(I18n.t(language, "askInWorkspace"));
         updateWorkspaceTooltip();
         viewAttachmentButton.setText(I18n.t(language, "view"));
+        cancelEditButton.setText(I18n.t(language, "cancelEdit"));
         removeAttachmentButton.setText(I18n.t(language, "remove"));
         newReplyButton.setText(I18n.t(language, "newReply"));
         historyButton.setText(I18n.t(language, "history"));
@@ -1782,7 +1879,7 @@ public final class ChatPanel extends JBPanel<ChatPanel> implements Disposable {
     private record MessageLayout(MessageBody body, boolean user) {
     }
 
-    private record EditorTarget(String path, String fileName) {
+    private record EditorTarget(String path) {
     }
 
     private record MessageView(JBLabel roleLabel, MessageBody body) {

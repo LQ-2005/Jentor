@@ -4,6 +4,7 @@ import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.tongji.cst3492.jentor.model.WorkspaceIndex;
+import com.tongji.cst3492.jentor.util.AtomicFileWriter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,8 +44,8 @@ public final class WorkspaceIndexStore {
     public static void save(Project project, WorkspaceIndex index) {
         Path path = pathFor(project);
         try {
-            Files.createDirectories(path.getParent());
-            Files.writeString(path, WorkspaceIndexCodec.toJson(index), StandardCharsets.UTF_8);
+            AtomicFileWriter.write(
+                    path, WorkspaceIndexCodec.toJson(index).getBytes(StandardCharsets.UTF_8));
         } catch (IOException | RuntimeException error) {
             LOG.warn("Cannot write the workspace index cache: " + path, error);
         }

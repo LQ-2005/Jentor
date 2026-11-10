@@ -21,4 +21,14 @@ public record Answer(
         disclosure = disclosure == null ? "" : disclosure;
         contextNote = contextNote == null ? "" : contextNote;
     }
+
+    /**
+     * True when cited course sections are valid but the answer also contains an
+     * explicitly disclosed general-knowledge supplement.
+     */
+    public boolean hasMixedEvidence() {
+        return citationStatus == CitationStatus.VALIDATED
+                && !sources.isEmpty()
+                && !disclosure.isBlank();
+    }
 }

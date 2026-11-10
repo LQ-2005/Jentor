@@ -75,7 +75,9 @@ public final class EditApplier {
                             } else {
                                 if (EditGuard.isConflict(
                                         edit.proposal().baseModificationStamp(),
-                                        edit.document().getModificationStamp())) {
+                                        edit.document().getModificationStamp(),
+                                        edit.proposal().baseContentHash(),
+                                        edit.document().getText())) {
                                     throw new IllegalStateException(
                                             "File changed while applying: "
                                                     + edit.proposal().path());
@@ -157,7 +159,10 @@ public final class EditApplier {
             return null;
         }
         if (EditGuard.isConflict(
-                proposal.baseModificationStamp(), document.getModificationStamp())) {
+                proposal.baseModificationStamp(),
+                document.getModificationStamp(),
+                proposal.baseContentHash(),
+                document.getText())) {
             errors.add("File changed after the suggestion was generated: " + proposal.path());
             return null;
         }

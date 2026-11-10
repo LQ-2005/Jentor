@@ -41,6 +41,17 @@ class EditGuardTest {
     }
 
     @Test
+    void ignoresAStampChangeWhenNormalizedContentIsUnchanged() {
+        String content = "class Demo {\r\n}\r\n";
+        String hash = EditGuard.contentHash(content);
+
+        assertFalse(EditGuard.isConflict(5L, 6L, hash, "class Demo {\n}\n"));
+        assertTrue(EditGuard.isConflict(
+                5L, 6L, hash, "class Demo {\n    int value;\n}\n"));
+        assertTrue(EditGuard.isConflict(5L, 6L, "", content));
+    }
+
+    @Test
     void rejectsAbsoluteAndParentTraversalPaths() {
         assertEquals("src/main/java/demo/A.java",
                 EditGuard.normalizeRelativePath("src\\main\\java\\demo\\A.java"));
@@ -48,6 +59,7 @@ class EditGuardTest {
         assertEquals("", EditGuard.normalizeRelativePath("src/../../outside/A.java"));
         assertEquals("", EditGuard.normalizeRelativePath("C:/outside/A.java"));
         assertEquals("", EditGuard.normalizeRelativePath("/outside/A.java"));
+        assertEquals("", EditGuard.normalizeRelativePath("src/main/java/"));
         assertFalse(EditGuard.isWritablePath("../outside/A.java"));
     }
 

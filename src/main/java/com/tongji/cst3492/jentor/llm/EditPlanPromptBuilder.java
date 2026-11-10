@@ -26,6 +26,19 @@ public final class EditPlanPromptBuilder {
             List<WorkspaceOutline> workspaceFiles,
             List<CodeFileSnapshot> contextFiles,
             String language) {
+        return build(question, previousAnalysis, activeFile, activeFileContent,
+                workspaceFiles, contextFiles, language, "");
+    }
+
+    public List<ChatMessage> build(
+            String question,
+            String previousAnalysis,
+            String activeFile,
+            String activeFileContent,
+            List<WorkspaceOutline> workspaceFiles,
+            List<CodeFileSnapshot> contextFiles,
+            String language,
+            String preferredTarget) {
         boolean zh = "zh".equals(language);
         String system = """
                 You plan a code change for Jentor. Do not write code. Return JSON only.
@@ -62,6 +75,10 @@ public final class EditPlanPromptBuilder {
                 - If the latest request adopts a previous analysis, carry all relevant issues
                   into file-specific instructions.
                 - Keep unrelated files out.
+                - If a PREFERRED TARGET is supplied, start from that file and treat it
+                  as the primary editing target. You may still include other source
+                  files when the user explicitly requests related changes or when
+                  they are required for the change to compile and behave correctly.
                 - If the target or requested fixes are genuinely ambiguous, return no files
                   and put one concise question in clarification.
                 - Never include code, patches or prose outside JSON.
@@ -84,6 +101,9 @@ public final class EditPlanPromptBuilder {
                 .append("\n\nPREVIOUS ASSISTANT ANALYSIS:\n")
                 .append(previousAnalysis == null || previousAnalysis.isBlank()
                         ? "(none)" : previousAnalysis)
+                .append("\n\nPREFERRED TARGET:\n")
+                .append(preferredTarget == null || preferredTarget.isBlank()
+                        ? "(none)" : preferredTarget)
                 .append("\n\nAVAILABLE WORKSPACE FILES:\n");
         for (WorkspaceOutline file : workspaceFiles == null ? List.<WorkspaceOutline>of() : workspaceFiles) {
             user.append(file.path());
